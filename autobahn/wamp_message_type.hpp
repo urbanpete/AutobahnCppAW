@@ -19,7 +19,9 @@
 #ifndef AUTOBAHN_WAMP_MESSAGE_TYPE_HPP
 #define AUTOBAHN_WAMP_MESSAGE_TYPE_HPP
 
+#ifdef ERROR
 #undef ERROR //some compilers like msvc define this
+#endif
 
 namespace autobahn {
 
