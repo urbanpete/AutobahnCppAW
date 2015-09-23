@@ -620,7 +620,7 @@ boost::future<wamp_call_result> wamp_session<IStream, OStream>::call(
 }
 
 template<typename IStream, typename OStream>
-void wamp_session<IStream, OStream>::handleRxError(const boost::system::error_code &error){
+void wamp_session<IStream, OStream>::handle_rx_error(const boost::system::error_code &error){
     //specifically catch any expected errors
     //this is emmitted if we are properly shutting down the socket
     if(error != boost::asio::error::operation_aborted){
@@ -1093,7 +1093,7 @@ void wamp_session<IStream, OStream>::got_message_header(const boost::system::err
             boost::asio::buffer(m_unpacker.buffer(), m_message_length),
             bind(&wamp_session<IStream, OStream>::got_message_body, this->shared_from_this(), boost::asio::placeholders::error));
     } else {
-        handleRxError(error);
+        handle_rx_error(error);
     }
 }
 
@@ -1122,7 +1122,7 @@ void wamp_session<IStream, OStream>::got_message_body(const boost::system::error
             receive_message();
         }
     } else {
-        handleRxError(error);
+        handle_rx_error(error);
     }
 }
 

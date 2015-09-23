@@ -31,7 +31,6 @@
 #define BOOST_THREAD_PROVIDES_FUTURE_WHEN_ALL_WHEN_ANY
 #include <boost/asio.hpp>
 #include <boost/thread/future.hpp>
-#include <boost/signals2.hpp>
 #include <cstdint>
 #include <functional>
 #include <istream>
@@ -215,8 +214,8 @@ public:
     }
 
 private:
-    /// Handle error codes from the istream (filters out operation_aborted error), passes all others to m_onRxError signal
-    void handleRxError(const boost::system::error_code &error);
+    /// Handle error codes from the istream (filters out operation_aborted error), throws boost::system::system_error for all others
+    void handle_rx_error(const boost::system::error_code &error);
 
     /// Process a WAMP ERROR message.
     void process_error(const wamp_message& message);
