@@ -6,3 +6,4 @@ set(HEADERS parameters.hpp)
 add_library(example_utilities ${SOURCES} ${HEADERS})
 
 add_subdirectory(components)
+add_subdirectory(sessions)
