@@ -31,6 +31,7 @@
 #define BOOST_THREAD_PROVIDES_FUTURE_WHEN_ALL_WHEN_ANY
 #include <boost/asio.hpp>
 #include <boost/thread/future.hpp>
+#include <boost/signals2.hpp>
 #include <cstdint>
 #include <functional>
 #include <istream>
@@ -44,7 +45,9 @@
 #include <vector>
 
 #if defined(_WIN32) || defined(WIN32)
+#ifndef WIN32_LEAN_AND_MEAN
 #define WIN32_LEAN_AND_MEAN
+#endif
 #endif
 
 #ifdef ERROR
@@ -202,7 +205,19 @@ public:
             const wamp_procedure& procedure,
             const provide_options& options = provide_options());
 
+    boost::signals2::signal<void (const boost::system::error_code &)> m_onRxError;
+    /*!
+     * \brief is_connected
+     * \return true if there is a valid session
+     */
+    bool is_connected()
+    {
+        return m_session_id!=0U;
+    }
+
 private:
+    /// Handle error codes from the istream (filters out operation_aborted error), passes all others to m_onRxError signal
+    void handleRxError(const boost::system::error_code &error);
 
     /// Process a WAMP ERROR message.
     void process_error(const wamp_message& message);
@@ -222,7 +237,9 @@ private:
     void process_unsubscribed(const wamp_message& message);
 
     /// Process a WAMP EVENT message.
-    void process_event(const wamp_message& message);
+    void process_event(
+            const wamp_message& message,
+            msgpack::unique_ptr<msgpack::zone>&& zone);
 
     /// Process a WAMP REGISTERED message.
     void process_registered(const wamp_message& message);

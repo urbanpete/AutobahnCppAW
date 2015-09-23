@@ -27,7 +27,7 @@
 
 void topic1(const autobahn::wamp_event& event)
 {
-    std::cerr << "received event: " << event.argument<std::string>(0) << std::endl;
+    std::cerr << "received event: " << event->argument<std::string>(0) << std::endl;
 }
 
 int main(int argc, char** argv)

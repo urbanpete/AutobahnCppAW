@@ -67,7 +67,7 @@ boost::future<bool> wamp_session<IStream, OStream>::start()
     // Send the initial handshake packet informing the server which
     // serialization format we wish to use, and our maximum message size.
     m_handshake_buffer[0] = 0x7F; // magic byte
-    m_handshake_buffer[1] = 0xF2; // we are ready to receive messages up to 2**24 octets and encoded using MsgPack
+    m_handshake_buffer[1] = static_cast<char>(0xF2); // we are ready to receive messages up to 2**24 octets and encoded using MsgPack
     m_handshake_buffer[2] = 0x00; // reserved
     m_handshake_buffer[3] = 0x00; // reserved
 
@@ -620,6 +620,18 @@ boost::future<wamp_call_result> wamp_session<IStream, OStream>::call(
 }
 
 template<typename IStream, typename OStream>
+void wamp_session<IStream, OStream>::handleRxError(const boost::system::error_code &error){
+    //specifically catch any non-error returns
+    if(error != boost::asio::error::operation_aborted){
+        std::cerr << "caught error" <<std::endl;
+        m_session_leave.set_value("socket closed");
+        leave().wait();
+        stop().wait();
+        m_onRxError(error);
+    }
+}
+
+template<typename IStream, typename OStream>
 void wamp_session<IStream, OStream>::process_welcome(const wamp_message& message)
 {
     m_session_id = message[1].as<uint64_t>();
@@ -718,7 +730,7 @@ void wamp_session<IStream, OStream>::process_error(const wamp_message& message)
                 error += ": ";
                 error += itr->second;
             }
-        } catch (const std::exception& e) {
+        } catch (const std::exception&)  {
             if (m_debug) {
                 std::cerr << "failed to parse error message keyword arguments" << std::endl;
             }
@@ -781,12 +793,14 @@ void wamp_session<IStream, OStream>::process_invocation(
 
     auto procedure_itr = m_procedures.find(registration_id);
     if (procedure_itr != m_procedures.end()) {
-        if (message[3].type != msgpack::type::MAP) {
-            throw protocol_error("INVOCATION.Details must be a map");
-        }
-
         wamp_invocation invocation = std::make_shared<wamp_invocation_impl>();
         invocation->set_request_id(request_id);
+
+        if (message[3].type != msgpack::type::MAP) {
+            throw protocol_error("INVOCATION.Details must be a map");
+        } else {
+            invocation->set_details(message[3]);
+        }
 
         if (message.size() > 4) {
             if (message[4].type != msgpack::type::ARRAY) {
@@ -950,7 +964,8 @@ void wamp_session<IStream, OStream>::process_unsubscribed(const wamp_message& me
 }
 
 template<typename IStream, typename OStream>
-void wamp_session<IStream, OStream>::process_event(const wamp_message& message)
+void wamp_session<IStream, OStream>::process_event(const wamp_message& message,
+                                                   msgpack::unique_ptr<msgpack::zone>&& zone)
 {
     // [EVENT, SUBSCRIBED.Subscription|id, PUBLISHED.Publication|id, Details|dict]
     // [EVENT, SUBSCRIBED.Subscription|id, PUBLISHED.Publication|id, Details|dict, PUBLISH.Arguments|list]
@@ -982,20 +997,23 @@ void wamp_session<IStream, OStream>::process_event(const wamp_message& message)
             throw protocol_error("EVENT - Details must be a dictionary");
         }
 
-        wamp_event event;
+        wamp_event event = std::make_shared<wamp_event_impl>();
+
         if (message.size() > 4) {
             if (message[4].type != msgpack::type::ARRAY) {
                 throw protocol_error("EVENT - EVENT.Arguments must be a list");
             }
-            event.set_arguments(message[4]);
+            event->set_arguments(message[4]);
 
             if (message.size() > 5) {
                 if (message[5].type != msgpack::type::MAP) {
                     throw protocol_error("EVENT - EVENT.ArgumentsKw must be a dictionary");
                 }
-                event.set_kw_arguments(message[5]);
+                event->set_kw_arguments(message[5]);
             }
         }
+        event->set_zone(std::move(*zone));
+        zone.reset();
 
         try {
             // now trigger the user supplied event handler ..
@@ -1078,9 +1096,7 @@ void wamp_session<IStream, OStream>::got_message_header(const boost::system::err
             boost::asio::buffer(m_unpacker.buffer(), m_message_length),
             bind(&wamp_session<IStream, OStream>::got_message_body, this->shared_from_this(), boost::asio::placeholders::error));
     } else {
-        // TODO: Well this is no good. The session will basically just become unresponsive
-        // at this point as we will no longer be trying to asynchronously receive messages.
-        // Perhaps we should just try and read the next header.
+        handleRxError(error);
     }
 }
 
@@ -1109,9 +1125,7 @@ void wamp_session<IStream, OStream>::got_message_body(const boost::system::error
             receive_message();
         }
     } else {
-        // TODO: Well this is no good. The session will basically just become unresponsive
-        // at this point as we will no longer be trying to asynchronously receive messages.
-        // Perhaps we should just try and read the next header.
+        handleRxError(error);
     }
 }
 
@@ -1176,7 +1190,7 @@ void wamp_session<IStream, OStream>::got_message(
             process_unsubscribed(message);
             break;
         case message_type::EVENT:
-            process_event(message);
+            process_event(message, std::move(zone));
             break;
         case message_type::CALL:
             throw protocol_error("received CALL message unexpected for WAMP client roles");
@@ -1208,34 +1222,38 @@ void wamp_session<IStream, OStream>::got_message(
 template<typename IStream, typename OStream>
 void wamp_session<IStream, OStream>::send(const std::shared_ptr<msgpack::sbuffer>& buffer)
 {
-    if (!m_stopped) {
-        if (m_debug) {
-            std::cerr << "TX message (" << buffer->size() << " octets) ..." << std::endl;
+    try{
+        if (!m_stopped) {
+            if (m_debug) {
+                std::cerr << "TX message (" << buffer->size() << " octets) ..." << std::endl;
+            }
+
+            // FIXME: rework this for queuing, async_write using gathered write
+            //
+            // boost::asio::write(m_out, std::vector<boost::asio::const_buffer>& out_vec, handler);
+
+            // http://www.boost.org/doc/libs/1_55_0/doc/html/boost_asio/reference/const_buffer/const_buffer/overload2.html
+            // http://www.boost.org/doc/libs/1_55_0/doc/html/boost_asio/reference/async_write/overload1.html
+
+            std::size_t written = 0;
+
+            // write message length prefix
+            uint32_t len = htonl(buffer->size());
+            written += boost::asio::write(m_out, boost::asio::buffer((char*)&len, sizeof(len)));
+
+            // write actual serialized message
+            written += boost::asio::write(m_out, boost::asio::buffer(buffer->data(), buffer->size()));
+
+            if (m_debug) {
+                std::cerr << "TX message sent (" << written << " / " << (sizeof(len) + buffer->size()) << " octets)" << std::endl;
+            }
+        } else {
+            if (m_debug) {
+                std::cerr << "TX message skipped since session stopped (" << buffer->size() << " octets)." << std::endl;
+            }
         }
-
-        // FIXME: rework this for queuing, async_write using gathered write
-        //
-        // boost::asio::write(m_out, std::vector<boost::asio::const_buffer>& out_vec, handler);
-
-        // http://www.boost.org/doc/libs/1_55_0/doc/html/boost_asio/reference/const_buffer/const_buffer/overload2.html
-        // http://www.boost.org/doc/libs/1_55_0/doc/html/boost_asio/reference/async_write/overload1.html
-
-        std::size_t written = 0;
-
-        // write message length prefix
-        uint32_t len = htonl(buffer->size());
-        written += boost::asio::write(m_out, boost::asio::buffer((char*)&len, sizeof(len)));
-
-        // write actual serialized message
-        written += boost::asio::write(m_out, boost::asio::buffer(buffer->data(), buffer->size()));
-
-        if (m_debug) {
-            std::cerr << "TX message sent (" << written << " / " << (sizeof(len) + buffer->size()) << " octets)" << std::endl;
-        }
-    } else {
-        if (m_debug) {
-            std::cerr << "TX message skipped since session stopped (" << buffer->size() << " octets)." << std::endl;
-        }
+    }catch (...){
+        std::cerr<<"send error"<<std::endl;
     }
 }
 
