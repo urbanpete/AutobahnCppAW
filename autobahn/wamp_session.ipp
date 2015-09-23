@@ -66,10 +66,10 @@ boost::future<bool> wamp_session<IStream, OStream>::start()
 {
     // Send the initial handshake packet informing the server which
     // serialization format we wish to use, and our maximum message size.
-    m_handshake_buffer[0] = 0x7F; // magic byte
-    m_handshake_buffer[1] = static_cast<char>(0xF2); // we are ready to receive messages up to 2**24 octets and encoded using MsgPack
-    m_handshake_buffer[2] = 0x00; // reserved
-    m_handshake_buffer[3] = 0x00; // reserved
+    m_handshake_buffer[0] = 0x7FU; // magic byte
+    m_handshake_buffer[1] = 0xF2U; // we are ready to receive messages up to 2**24 octets and encoded using MsgPack
+    m_handshake_buffer[2] = 0x00U; // reserved
+    m_handshake_buffer[3] = 0x00U; // reserved
 
     boost::asio::write(
             m_out,
@@ -621,13 +621,10 @@ boost::future<wamp_call_result> wamp_session<IStream, OStream>::call(
 
 template<typename IStream, typename OStream>
 void wamp_session<IStream, OStream>::handleRxError(const boost::system::error_code &error){
-    //specifically catch any non-error returns
+    //specifically catch any expected errors
+    //this is emmitted if we are properly shutting down the socket
     if(error != boost::asio::error::operation_aborted){
-        std::cerr << "caught error" <<std::endl;
-        m_session_leave.set_value("socket closed");
-        leave().wait();
-        stop().wait();
-        m_onRxError(error);
+        throw boost::system::system_error(error);
     }
 }
 

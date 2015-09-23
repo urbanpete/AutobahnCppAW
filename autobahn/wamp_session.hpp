@@ -205,7 +205,6 @@ public:
             const wamp_procedure& procedure,
             const provide_options& options = provide_options());
 
-    boost::signals2::signal<void (const boost::system::error_code &)> m_onRxError;
     /*!
      * \brief is_connected
      * \return true if there is a valid session
@@ -277,7 +276,7 @@ private:
     /// Output stream this session runs on.
     OStream& m_out;
 
-    char m_message_length_buffer[4];
+    unsigned char m_message_length_buffer[4];
     uint32_t m_message_length;
 
     /// MsgPack unserialization unpacker.
@@ -287,7 +286,7 @@ private:
     std::atomic<uint64_t> m_request_id;
 
     /// Buffer used to hold the sent/recevied rawsocket handshake
-    char m_handshake_buffer[4];
+    unsigned char m_handshake_buffer[4];
 
     /// Synchronization for dealing with the rawsocket handshake
     boost::promise<bool> m_handshake;
