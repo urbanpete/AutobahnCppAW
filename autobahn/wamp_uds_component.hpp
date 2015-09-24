@@ -7,7 +7,7 @@
 #include <boost/asio/local/stream_protocol.hpp>
 #include <memory>
 #include <string>
-
+#if defined(BOOST_ASIO_HAS_LOCAL_SOCKETS)
 namespace autobahn {
 
 /*!
@@ -19,5 +19,5 @@ using wamp_uds_component =
                 boost::asio::local::stream_protocol::endpoint>;
 
 } // namespace autobahn
-
+#endif
 #endif // AUTOBAHN_WAMP_UDS_COMPONENT_HPP
