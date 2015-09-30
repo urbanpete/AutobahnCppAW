@@ -25,6 +25,7 @@
 #include "wamp_publication.hpp"
 #include "wamp_registration.hpp"
 #include "wamp_register_request.hpp"
+#include "wamp_unregister_request.hpp"
 #include "wamp_subscribe_request.hpp"
 #include "wamp_subscription.hpp"
 #include "wamp_unsubscribe_request.hpp"
@@ -498,6 +499,39 @@ void wamp_session<IStream, OStream>::publish(
 
         send(buffer);
     });
+}
+
+template<typename IStream, typename OStream>
+boost::future<void> wamp_session<IStream, OStream>::unprovide(const wamp_registration& registration){
+    auto buffer = std::make_shared<msgpack::sbuffer>();
+    msgpack::packer<msgpack::sbuffer> packer(*buffer);
+    uint64_t request_id = ++m_request_id;
+
+    //[UNREGISTER, Request|id, REGISTERED.Registration|id]
+    packer.pack_array(3);
+    packer.pack(static_cast<int>(message_type::UNREGISTER));
+    packer.pack(request_id);
+    packer.pack(registration.id());
+
+    auto weak_self = std::weak_ptr<wamp_session>(this->shared_from_this());
+    auto unregister_request = std::make_shared<wamp_unregister_request>();
+
+    m_io.dispatch([=]() {
+        auto shared_self = weak_self.lock();
+        if (!shared_self) {
+            return;
+        }
+
+        if (!m_session_id) {
+            throw no_session_error();
+        }
+
+        m_unregister_requests.emplace(request_id, unregister_request);
+
+        send(buffer);
+    });
+
+    return unregister_request->response().get_future();
 }
 
 template<typename IStream, typename OStream>
@@ -1064,6 +1098,28 @@ void wamp_session<IStream, OStream>::process_registered(const wamp_message& mess
 }
 
 template<typename IStream, typename OStream>
+void wamp_session<IStream, OStream>::process_unregistered(const wamp_message& message)
+{
+    // [UNREGISTERED, UNREGISTER.Request|id]
+    if (message.size() != 2) {
+        throw protocol_error("UNREGISTERED - length must be 2");
+    }
+
+    if (message[1].type != msgpack::type::POSITIVE_INTEGER) {
+        throw protocol_error("UNREGISTERED - UNREGISTERED.Request must be an integer");
+    }
+
+    uint64_t request_id = message[1].as<uint64_t>();
+    auto unregister_request_itr = m_unregister_requests.find(request_id);
+    if (unregister_request_itr != m_unregister_requests.end()) {
+        unregister_request_itr->second->set_response();
+        m_unregister_requests.erase(request_id);
+    } else {
+        throw protocol_error("UNREGISTERED - no pending request ID");
+    }
+}
+
+template<typename IStream, typename OStream>
 void wamp_session<IStream, OStream>::receive_message()
 {
     if (m_debug) {
@@ -1204,7 +1260,7 @@ void wamp_session<IStream, OStream>::got_message(
         case message_type::UNREGISTER:
             throw protocol_error("received UNREGISTER message unexpected for WAMP client roles");
         case message_type::UNREGISTERED:
-            // FIXME
+            process_unregistered(message);
             break;
         case message_type::INVOCATION:
             process_invocation(message, std::move(zone));

@@ -58,6 +58,7 @@ namespace autobahn {
 class wamp_call;
 class wamp_register_request;
 class wamp_registration;
+class wamp_unregister_request;
 class wamp_subscribe_request;
 class wamp_subscription;
 class wamp_unsubscribe_request;
@@ -205,6 +206,14 @@ public:
             const provide_options& options = provide_options());
 
     /*!
+     * Unregister a provider handler to previosuly provided registration.
+     *
+     * \param registration The registration to stop providing.
+     * \return A future that synchronizes to the unregister response.
+     */
+    boost::future<void> unprovide(const wamp_registration& registration);
+
+    /*!
      * \brief is_connected
      * \return true if there is a valid session
      */
@@ -241,6 +250,9 @@ private:
 
     /// Process a WAMP REGISTERED message.
     void process_registered(const wamp_message& message);
+
+    /// Process a WAMP UNREGISTERED message.
+    void process_unregistered(const wamp_message& message);
 
     /// Process a WAMP INVOCATION message.
     void process_invocation(
@@ -331,6 +343,9 @@ private:
 
     /// Map of outstanding WAMP register requests (request ID -> register request).
     std::map<uint64_t, std::shared_ptr<wamp_register_request>> m_register_requests;
+
+    /// Map of outstanding WAMP unregister requests (request ID -> unregister request).
+    std::map<uint64_t, std::shared_ptr<wamp_unregister_request>> m_unregister_requests;
 
     /// Map of registered procedures (registration ID -> procedure)
     std::map<uint64_t, wamp_procedure> m_procedures;
