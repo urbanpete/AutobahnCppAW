@@ -227,7 +227,7 @@ private:
     void handle_rx_error(const boost::system::error_code &error);
 
     /// Process a WAMP ERROR message.
-    void process_error(const wamp_message& message);
+    void process_error(const wamp_message& message, msgpack::unique_ptr<msgpack::zone>&& zone);
 
     /// Process a WAMP HELLO message.
     void process_welcome(const wamp_message& message);

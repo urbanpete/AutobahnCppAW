@@ -696,7 +696,7 @@ void wamp_session<IStream, OStream>::process_goodbye(const wamp_message& message
 }
 
 template<typename IStream, typename OStream>
-void wamp_session<IStream, OStream>::process_error(const wamp_message& message)
+void wamp_session<IStream, OStream>::process_error(const wamp_message& message, msgpack::unique_ptr<msgpack::zone>&& zone)
 {
     // [ERROR, REQUEST.Type|int, REQUEST.Request|id, Details|dict, Error|uri]
     // [ERROR, REQUEST.Type|int, REQUEST.Request|id, Details|dict, Error|uri, Arguments|list]
@@ -739,13 +739,16 @@ void wamp_session<IStream, OStream>::process_error(const wamp_message& message)
     if (message[4].type != msgpack::type::STR) {
         throw protocol_error("invalid ERROR message - Error must be a string (URI)");
     }
-    std::string error = message[4].as<std::string>();
+    std::string uri = message[4].as<std::string>();
+    msgpack::object args = EMPTY_ARGUMENTS;
+    msgpack::object kw_args = EMPTY_KW_ARGUMENTS;
 
     // Arguments|list
     if (message.size() > 5) {
         if (message[5].type != msgpack::type::ARRAY) {
             throw protocol_error("invalid ERROR message structure - Arguments must be a list");
         }
+        args = message[5];
     }
 
     // ArgumentsKw|list
@@ -753,21 +756,7 @@ void wamp_session<IStream, OStream>::process_error(const wamp_message& message)
         if (message[6].type != msgpack::type::MAP) {
             throw protocol_error("invalid ERROR message structure - ArgumentsKw must be a dictionary");
         }
-        std::unordered_map<std::string, std::string> kw_args;
-        try {
-            message[6].convert(kw_args);
-            const auto itr = kw_args.find("what");
-            if (itr != kw_args.end()) {
-                error += ": ";
-                error += itr->second;
-            }
-        } catch (const std::exception&)  {
-            if (m_debug) {
-                std::cerr << "failed to parse error message keyword arguments" << std::endl;
-            }
-
-            error += ": unknown exception";
-        }
+        kw_args = message[6];
     }
 
     switch (request_type) {
@@ -780,11 +769,9 @@ void wamp_session<IStream, OStream>::process_error(const wamp_message& message)
                 auto call_itr = m_calls.find(request_id);
 
                 if (call_itr != m_calls.end()) {
-
-                    // FIXME: forward all error info .. also not sure if this is the correct
-                    // way to use set_exception()
-                    call_itr->second->result().set_exception(boost::copy_exception(std::runtime_error(error)));
-
+                    auto error = wamp_error(uri, args, kw_args, std::move(*zone));
+                    call_itr->second->result().set_exception(boost::copy_exception(error));
+                    zone.release();
                 } else {
                     throw protocol_error("bogus ERROR message for non-pending CALL request ID");
                 }
@@ -1225,7 +1212,7 @@ void wamp_session<IStream, OStream>::got_message(
             // FIXME
             break;
         case message_type::ERROR:
-            process_error(message);
+            process_error(message, std::move(zone));
             break;
         case message_type::PUBLISH:
             throw protocol_error("received PUBLISH message unexpected for WAMP client roles");
