@@ -20,6 +20,7 @@
 #include "wamp_call.hpp"
 #include "wamp_call_result.hpp"
 #include "wamp_event.hpp"
+#include "wamp_error.hpp"
 #include "wamp_invocation.hpp"
 #include "wamp_message_type.hpp"
 #include "wamp_publication.hpp"
@@ -663,14 +664,14 @@ void wamp_session<IStream, OStream>::handle_rx_error(const boost::system::error_
 }
 
 template<typename IStream, typename OStream>
-void wamp_session<IStream, OStream>::process_welcome(const wamp_message& message)
+void wamp_session<IStream, OStream>::process_welcome(wamp_message& message)
 {
     m_session_id = message[1].as<uint64_t>();
     m_session_join.set_value(m_session_id);
 }
 
 template<typename IStream, typename OStream>
-void wamp_session<IStream, OStream>::process_goodbye(const wamp_message& message)
+void wamp_session<IStream, OStream>::process_goodbye(wamp_message& message)
 {
     m_session_id = 0;
 
@@ -695,8 +696,9 @@ void wamp_session<IStream, OStream>::process_goodbye(const wamp_message& message
     m_session_leave.set_value(reason);
 }
 
+
 template<typename IStream, typename OStream>
-void wamp_session<IStream, OStream>::process_error(const wamp_message& message, msgpack::unique_ptr<msgpack::zone>&& zone)
+void wamp_session<IStream, OStream>::process_error(wamp_message& message)
 {
     // [ERROR, REQUEST.Type|int, REQUEST.Request|id, Details|dict, Error|uri]
     // [ERROR, REQUEST.Type|int, REQUEST.Request|id, Details|dict, Error|uri, Arguments|list]
@@ -742,6 +744,7 @@ void wamp_session<IStream, OStream>::process_error(const wamp_message& message, 
     std::string uri = message[4].as<std::string>();
     msgpack::object args = EMPTY_ARGUMENTS;
     msgpack::object kw_args = EMPTY_KW_ARGUMENTS;
+    msgpack::object details = message[3];
 
     // Arguments|list
     if (message.size() > 5) {
@@ -769,9 +772,8 @@ void wamp_session<IStream, OStream>::process_error(const wamp_message& message, 
                 auto call_itr = m_calls.find(request_id);
 
                 if (call_itr != m_calls.end()) {
-                    auto error = wamp_error(uri, args, kw_args, std::move(*zone));
-                    call_itr->second->result().set_exception(boost::copy_exception(error));
-                    zone.release();
+                    auto error = wamp_error(request_type, request_id, uri, details, args, kw_args, message.zone());
+                    call_itr->second->result().set_exception(std::move(error));
                 } else {
                     throw protocol_error("bogus ERROR message for non-pending CALL request ID");
                 }
@@ -787,9 +789,7 @@ void wamp_session<IStream, OStream>::process_error(const wamp_message& message, 
 
 
 template<typename IStream, typename OStream>
-void wamp_session<IStream, OStream>::process_invocation(
-        const wamp_message& message,
-        msgpack::unique_ptr<msgpack::zone>&& zone)
+void wamp_session<IStream, OStream>::process_invocation(wamp_message& message)
 {
     // [INVOCATION, Request|id, REGISTERED.Registration|id, Details|dict]
     // [INVOCATION, Request|id, REGISTERED.Registration|id, Details|dict, CALL.Arguments|list]
@@ -834,8 +834,7 @@ void wamp_session<IStream, OStream>::process_invocation(
             }
         }
 
-        invocation->set_zone(std::move(*zone));
-        zone.reset();
+        invocation->set_zone(message.zone());
 
         auto weak_this = std::weak_ptr<wamp_session>(this->shared_from_this());
 
@@ -889,8 +888,7 @@ void wamp_session<IStream, OStream>::process_invocation(
 }
 
 template<typename IStream, typename OStream>
-void wamp_session<IStream, OStream>::process_call_result(
-        const wamp_message& message, msgpack::unique_ptr<msgpack::zone>&& zone)
+void wamp_session<IStream, OStream>::process_call_result(wamp_message& message)
 {
     // [RESULT, CALL.Request|id, Details|dict]
     // [RESULT, CALL.Request|id, Details|dict, YIELD.Arguments|list]
@@ -911,7 +909,7 @@ void wamp_session<IStream, OStream>::process_call_result(
             throw protocol_error("RESULT - Details must be a dictionary");
         }
 
-        wamp_call_result result(std::move(zone));
+        wamp_call_result result(message.zone());
         if (message.size() > 3) {
             if (message[3].type != msgpack::type::ARRAY) {
                 throw protocol_error("RESULT - YIELD.Arguments must be a list");
@@ -932,7 +930,7 @@ void wamp_session<IStream, OStream>::process_call_result(
 }
 
 template<typename IStream, typename OStream>
-void wamp_session<IStream, OStream>::process_subscribed(const wamp_message& message)
+void wamp_session<IStream, OStream>::process_subscribed(wamp_message& message)
 {
     // [SUBSCRIBED, SUBSCRIBE.Request|id, Subscription|id]
     if (message.size() != 3) {
@@ -960,7 +958,7 @@ void wamp_session<IStream, OStream>::process_subscribed(const wamp_message& mess
 }
 
 template<typename IStream, typename OStream>
-void wamp_session<IStream, OStream>::process_unsubscribed(const wamp_message& message)
+void wamp_session<IStream, OStream>::process_unsubscribed(wamp_message& message)
 {
     // [UNSUBSCRIBED, UNSUBSCRIBE.Request|id]
     if (message.size() != 2) {
@@ -982,8 +980,7 @@ void wamp_session<IStream, OStream>::process_unsubscribed(const wamp_message& me
 }
 
 template<typename IStream, typename OStream>
-void wamp_session<IStream, OStream>::process_event(const wamp_message& message,
-                                                   msgpack::unique_ptr<msgpack::zone>&& zone)
+void wamp_session<IStream, OStream>::process_event(wamp_message& message)
 {
     // [EVENT, SUBSCRIBED.Subscription|id, PUBLISHED.Publication|id, Details|dict]
     // [EVENT, SUBSCRIBED.Subscription|id, PUBLISHED.Publication|id, Details|dict, PUBLISH.Arguments|list]
@@ -1030,8 +1027,7 @@ void wamp_session<IStream, OStream>::process_event(const wamp_message& message,
                 event->set_kw_arguments(message[5]);
             }
         }
-        event->set_zone(std::move(*zone));
-        zone.reset();
+        event->set_zone(message.zone());
 
         try {
             // now trigger the user supplied event handler ..
@@ -1057,7 +1053,7 @@ void wamp_session<IStream, OStream>::process_event(const wamp_message& message,
 }
 
 template<typename IStream, typename OStream>
-void wamp_session<IStream, OStream>::process_registered(const wamp_message& message)
+void wamp_session<IStream, OStream>::process_registered(wamp_message& message)
 {
     // [REGISTERED, REGISTER.Request|id, Registration|id]
 
@@ -1085,7 +1081,7 @@ void wamp_session<IStream, OStream>::process_registered(const wamp_message& mess
 }
 
 template<typename IStream, typename OStream>
-void wamp_session<IStream, OStream>::process_unregistered(const wamp_message& message)
+void wamp_session<IStream, OStream>::process_unregistered(wamp_message& message)
 {
     // [UNREGISTERED, UNREGISTER.Request|id]
     if (message.size() != 2) {
@@ -1152,13 +1148,13 @@ void wamp_session<IStream, OStream>::got_message_body(const boost::system::error
         msgpack::unpacked result;
 
         while (m_unpacker.next(&result)) {
-            msgpack::object obj(result.get());
+            wamp_message msg(result);
 
             if (m_debug) {
-                std::cerr << "RX WAMP message: " << obj << std::endl;
+                std::cerr << "RX WAMP message: " << msg.to_string() << std::endl;
             }
 
-            got_message(obj, std::move(result.zone()));
+            got_message(msg);
         }
 
         if (!m_stopped) {
@@ -1169,30 +1165,11 @@ void wamp_session<IStream, OStream>::got_message_body(const boost::system::error
     }
 }
 
-
 template<typename IStream, typename OStream>
 void wamp_session<IStream, OStream>::got_message(
-        const msgpack::object& obj, msgpack::unique_ptr<msgpack::zone>&& zone)
+        wamp_message& message)
 {
-
-    if (obj.type != msgpack::type::ARRAY) {
-        throw protocol_error("invalid message structure - message is not an array");
-    }
-
-    wamp_message message;
-    obj.convert(&message);
-
-    if (message.size() < 1) {
-        throw protocol_error("invalid message structure - missing message code");
-    }
-
-    if (message[0].type != msgpack::type::POSITIVE_INTEGER) {
-        throw protocol_error("invalid message code type - not an integer");
-    }
-
-    message_type code = static_cast<message_type>(message[0].as<int>());
-
-    switch (code) {
+    switch (message.type()) {
         case message_type::HELLO:
             throw protocol_error("received HELLO message unexpected for WAMP client roles");
         case message_type::WELCOME:
@@ -1212,7 +1189,7 @@ void wamp_session<IStream, OStream>::got_message(
             // FIXME
             break;
         case message_type::ERROR:
-            process_error(message, std::move(zone));
+            process_error(message);
             break;
         case message_type::PUBLISH:
             throw protocol_error("received PUBLISH message unexpected for WAMP client roles");
@@ -1230,14 +1207,14 @@ void wamp_session<IStream, OStream>::got_message(
             process_unsubscribed(message);
             break;
         case message_type::EVENT:
-            process_event(message, std::move(zone));
+            process_event(message);
             break;
         case message_type::CALL:
             throw protocol_error("received CALL message unexpected for WAMP client roles");
         case message_type::CANCEL:
             throw protocol_error("received CANCEL message unexpected for WAMP client roles");
         case message_type::RESULT:
-            process_call_result(message, std::move(zone));
+            process_call_result(message);
             break;
         case message_type::REGISTER:
             throw protocol_error("received REGISTER message unexpected for WAMP client roles");
@@ -1250,7 +1227,7 @@ void wamp_session<IStream, OStream>::got_message(
             process_unregistered(message);
             break;
         case message_type::INVOCATION:
-            process_invocation(message, std::move(zone));
+            process_invocation(message);
             break;
         case message_type::INTERRUPT:
             throw protocol_error("received INTERRUPT message - not implemented");

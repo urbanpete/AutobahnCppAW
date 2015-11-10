@@ -34,35 +34,6 @@ class no_session_error : public std::runtime_error {
      no_session_error() : std::runtime_error("session not joined") {};
 };
 
-class wamp_error : public std::runtime_error {
-  public:
-    wamp_error(const std::string &uri,
-               const msgpack::object &args,
-               const msgpack::object &kwargs,
-               msgpack::zone &&zone)
-             : std::runtime_error(uri)
-             , m_args(args)
-             , m_kw_args(kwargs)
-             , m_zone(&zone)
-    {
-    }
-    const char *uri() const{
-        return what();
-    }
-    template<typename T>
-    T args() const{
-        return m_args.as<T>();
-    }
-    template<typename T>
-    T kw_args() const{
-        return m_kw_args.as<T>();
-    }
-private:
-    msgpack::object m_args;
-    msgpack::object m_kw_args;
-    std::shared_ptr<msgpack::zone> m_zone;
-};
-
 } // namespace autobahn
 
 #endif // AUTOBAHN_EXCEPTIONS_HPP

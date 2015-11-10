@@ -21,10 +21,68 @@
 
 #include <msgpack.hpp>
 #include <vector>
+#include <autobahn/wamp_message_type.hpp>
+#include <autobahn/exceptions.hpp>
 
 namespace autobahn {
 
-typedef std::vector<msgpack::object> wamp_message;
+class wamp_message{
+public:
+    wamp_message(){}
+    wamp_message(msgpack::unpacked &Input)
+    {
+        init(Input);
+    }
+    void init(msgpack::unpacked &Input){
+        msgpack::object obj = Input.get();
+
+        if (obj.type != msgpack::type::ARRAY) {
+            throw protocol_error("invalid message structure - message is not an array");
+        }
+        obj.convert(m_fields);
+        m_zone = std::move(Input.zone());
+
+
+        if (m_fields.size() < 1) {
+            throw protocol_error("invalid message structure - missing message code");
+        }
+
+        if (m_fields[0].type != msgpack::type::POSITIVE_INTEGER) {
+            throw protocol_error("invalid message code type - not an integer");
+        }
+    }
+     const msgpack::object &operator [](size_t idx) const{
+        return m_fields[idx];
+    }
+
+    size_t size() const{
+        return m_fields.size();
+    }
+
+    msgpack::unique_ptr<msgpack::zone> &zone(){
+        return m_zone;
+    }
+
+    message_type type() const{
+        return static_cast<message_type>(m_fields[0].as<int>());
+    }
+
+    std::string to_string(){
+        std::stringstream ss;
+        ss << '[';
+        for(size_t i = 0; i<m_fields.size(); ++i){
+            if(i>0){
+                ss<< ", ";
+            }
+            ss << m_fields[0];
+        }
+        ss << ']';
+        return ss.str();
+    }
+private:
+    std::vector<msgpack::object> m_fields;
+    msgpack::unique_ptr<msgpack::zone> m_zone;
+};
 
 } // namespace autobahn
 

@@ -20,6 +20,7 @@
 #define AUTOBAHN_HPP
 
 #include "wamp_component.hpp"
+#include "wamp_error.hpp"
 #include "wamp_event.hpp"
 #include "wamp_invocation.hpp"
 #include "wamp_session.hpp"

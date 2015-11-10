@@ -335,7 +335,7 @@ inline void wamp_invocation_impl::set_details(const msgpack::object& details)
     m_details = details;
 }
 
-inline void wamp_invocation_impl::set_zone(msgpack::zone&& zone)
+inline void wamp_invocation_impl::set_zone(msgpack::unique_ptr<msgpack::zone> &zone)
 {
     m_zone = std::move(zone);
 }

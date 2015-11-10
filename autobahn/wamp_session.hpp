@@ -236,40 +236,34 @@ private:
     void handle_rx_error(const boost::system::error_code &error);
 
     /// Process a WAMP ERROR message.
-    void process_error(const wamp_message& message, msgpack::unique_ptr<msgpack::zone>&& zone);
+    void process_error(wamp_message& message);
 
     /// Process a WAMP HELLO message.
-    void process_welcome(const wamp_message& message);
+    void process_welcome(wamp_message& message);
 
     /// Process a WAMP RESULT message.
-    void process_call_result(
-            const wamp_message& message,
-            msgpack::unique_ptr<msgpack::zone>&& zone);
+    void process_call_result(wamp_message& message);
 
     /// Process a WAMP SUBSCRIBED message.
-    void process_subscribed(const wamp_message& message);
+    void process_subscribed(wamp_message& message);
 
     /// Process a WAMP UNSUBSCRIBED message.
-    void process_unsubscribed(const wamp_message& message);
+    void process_unsubscribed(wamp_message& message);
 
     /// Process a WAMP EVENT message.
-    void process_event(
-            const wamp_message& message,
-            msgpack::unique_ptr<msgpack::zone>&& zone);
+    void process_event(wamp_message& message);
 
     /// Process a WAMP REGISTERED message.
-    void process_registered(const wamp_message& message);
+    void process_registered(wamp_message& message);
 
     /// Process a WAMP UNREGISTERED message.
-    void process_unregistered(const wamp_message& message);
+    void process_unregistered(wamp_message& message);
 
     /// Process a WAMP INVOCATION message.
-    void process_invocation(
-            const wamp_message& message,
-            msgpack::unique_ptr<msgpack::zone>&& zone);
+    void process_invocation(wamp_message& message);
 
     /// Process a WAMP GOODBYE message.
-    void process_goodbye(const wamp_message& message);
+    void process_goodbye(wamp_message& message);
 
     /// Send out message serialized in serialization buffer to ostream.
     void send(const std::shared_ptr<msgpack::sbuffer>& buffer);
@@ -283,7 +277,7 @@ private:
 
     void got_message_body(const boost::system::error_code& error);
 
-    void got_message(const msgpack::object& object, msgpack::unique_ptr<msgpack::zone>&& zone);
+    void got_message(wamp_message& object);
 
 
     bool m_debug;

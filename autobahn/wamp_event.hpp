@@ -175,11 +175,11 @@ public:
     void set_arguments(const msgpack::object& arguments);
     void set_kw_arguments(const msgpack::object& kw_arguments);
 
-    void set_zone(msgpack::zone&&);
+    void set_zone( msgpack::unique_ptr<msgpack::zone>& );
 private:
     msgpack::object m_arguments;
     msgpack::object m_kw_arguments;
-    msgpack::zone m_zone;
+    msgpack::unique_ptr<msgpack::zone> m_zone;
 };
 
 using wamp_event = std::shared_ptr<wamp_event_impl>;
