@@ -284,18 +284,15 @@ boost::future<std::string> wamp_session<IStream, OStream>::leave(const std::stri
         }
 
         if (!m_session_id) {
-            m_session_leave.set_exception(no_session_error());
             throw no_session_error();
         }
 
         if (m_goodbye_sent) {
-            m_session_leave.set_exception(protocol_error("goodbye already sent"));
             throw protocol_error("goodbye already sent");
         }
 
         m_goodbye_sent = true;
         m_session_id = 0;
-                      
 
         send(buffer);
     });
