@@ -284,15 +284,18 @@ boost::future<std::string> wamp_session<IStream, OStream>::leave(const std::stri
         }
 
         if (!m_session_id) {
+            m_session_leave.set_exception(no_session_error());
             throw no_session_error();
         }
 
         if (m_goodbye_sent) {
+            m_session_leave.set_exception(protocol_error("goodbye already sent"));
             throw protocol_error("goodbye already sent");
         }
 
         m_goodbye_sent = true;
         m_session_id = 0;
+                      
 
         send(buffer);
     });
@@ -302,7 +305,7 @@ boost::future<std::string> wamp_session<IStream, OStream>::leave(const std::stri
 
 template<typename IStream, typename OStream>
 boost::future<wamp_subscription> wamp_session<IStream, OStream>::subscribe(
-        const std::string& topic, const wamp_event_handler& handler)
+        const std::string& topic, const wamp_event_handler& handler, const subscribe_options &options)
 {
     auto buffer = std::make_shared<msgpack::sbuffer>();
     msgpack::packer<msgpack::sbuffer> packer(*buffer);
@@ -312,7 +315,7 @@ boost::future<wamp_subscription> wamp_session<IStream, OStream>::subscribe(
     packer.pack_array(4);
     packer.pack(static_cast<int>(message_type::SUBSCRIBE));
     packer.pack(request_id);
-    packer.pack_map(0);
+    packer.pack(options);
     packer.pack(topic);
 
     auto weak_self = std::weak_ptr<wamp_session>(this->shared_from_this());
@@ -1007,12 +1010,13 @@ void wamp_session<IStream, OStream>::process_event(wamp_message& message)
         }
 
         //uint64_t publication_id = message[2].as<uint64_t>();
+        wamp_event event = std::make_shared<wamp_event_impl>();
 
         if (message[3].type != msgpack::type::MAP) {
             throw protocol_error("EVENT - Details must be a dictionary");
         }
+        event->set_details(message[3]);
 
-        wamp_event event = std::make_shared<wamp_event_impl>();
 
         if (message.size() > 4) {
             if (message[4].type != msgpack::type::ARRAY) {

@@ -153,7 +153,7 @@ public:
      * \return A future that resolves to a autobahn::subscription
      */
     boost::future<wamp_subscription> subscribe(
-            const std::string& topic, const wamp_event_handler& handler);
+            const std::string& topic, const wamp_event_handler& handler, const subscribe_options &options=subscribe_options());
 
     /*!
      * Unubscribe a handler to previosuly subscribed topic.

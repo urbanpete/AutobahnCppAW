@@ -28,8 +28,9 @@ boost::future<void> wamp_network_component<Socket, Endpoint>::start()
 
     // Consider async connect and use a promise to chain a
     // future to that returned by the call to start.
-    m_socket.connect(m_remote_endpoint);
     wamp_component<Socket, Socket>::initialize(m_socket, m_socket);
+    m_socket.connect(m_remote_endpoint);
+
     return wamp_component<Socket, Socket>::start();
 }
 
