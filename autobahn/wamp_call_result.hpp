@@ -19,6 +19,7 @@
 #ifndef AUTOBAHN_WAMP_CALL_RESULT_HPP
 #define AUTOBAHN_WAMP_CALL_RESULT_HPP
 
+#include <memory>
 #include <msgpack.hpp>
 #include <string>
 
@@ -29,10 +30,11 @@ class wamp_call_result
 public:
     wamp_call_result();
     wamp_call_result(msgpack::unique_ptr<msgpack::zone>& zone);
-    wamp_call_result(const wamp_call_result& other);
+
+    wamp_call_result(const wamp_call_result& other) = delete;
     wamp_call_result(wamp_call_result&& other);
 
-    wamp_call_result& operator=(const wamp_call_result& other);
+    wamp_call_result& operator=(const wamp_call_result& other) = delete;
     wamp_call_result& operator=(wamp_call_result&& other);
 
     /*!
@@ -183,7 +185,6 @@ private:
     uint64_t m_id;
     msgpack::object m_arguments;
     msgpack::object m_kw_arguments;
-    msgpack::unique_ptr<msgpack::zone> m_zone;
 };
 
 } // namespace autobahn

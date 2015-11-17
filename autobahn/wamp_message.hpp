@@ -19,71 +19,150 @@
 #ifndef AUTOBAHN_WAMP_MESSAGE_HPP
 #define AUTOBAHN_WAMP_MESSAGE_HPP
 
+#include <cstddef>
 #include <msgpack.hpp>
 #include <vector>
-#include <autobahn/wamp_message_type.hpp>
-#include <autobahn/exceptions.hpp>
 
 namespace autobahn {
 
-class wamp_message{
+/*!
+ * A class that represents a wamp message in its simplest form.
+ *
+ *     [field1, field2, field3, ...]
+ *
+ * Although not all arrays are valid wamp messages, this class
+ * simply provides the building blocks to construct any type of
+ * message.
+ *
+ * TODO: Investigate the benefits of creating a heirarchy of
+ *       wamp message types similar to what has been done for
+ *       bonefish.
+ */
+class wamp_message
+{
 public:
-    wamp_message(){}
-    wamp_message(msgpack::unpacked &Input)
-    {
-        init(Input);
-    }
-    void init(msgpack::unpacked &Input){
-        msgpack::object obj = Input.get();
+    /*!
+     * A convenience type for representing message fields
+     */
+    using message_fields = std::vector<msgpack::object>;
 
-        if (obj.type != msgpack::type::ARRAY) {
-            throw protocol_error("invalid message structure - message is not an array");
-        }
-        obj.convert(m_fields);
-        m_zone = std::move(Input.zone());
+public:
+    /*!
+     * Constructs a wamp message with the given number of fields.
+     *
+     * @param num_fields The number of fields in the message.
+     */
+    wamp_message(std::size_t num_fields);
 
+    /*!
+     * Constructs a wamp message with the given number of fields.
+     *
+     * @param num_fields The number of fields in the message.
+     * @param zone The zone used to allocate fields in the message.
+     */
+    wamp_message(std::size_t num_fields, msgpack::zone&& zone);
 
-        if (m_fields.size() < 1) {
-            throw protocol_error("invalid message structure - missing message code");
-        }
+    /*!
+     * Constructs a wamp message with the given fields.
+     *
+     * @param fields The fields in the message.
+     * @param zone The zone used to allocate fields in the message.
+     */
+    wamp_message(message_fields&& fields, msgpack::zone&& zone);
 
-        if (m_fields[0].type != msgpack::type::POSITIVE_INTEGER) {
-            throw protocol_error("invalid message code type - not an integer");
-        }
-    }
-     const msgpack::object &operator [](size_t idx) const{
-        return m_fields[idx];
-    }
+    wamp_message(const wamp_message& other) = delete;
+    wamp_message(wamp_message&& other);
 
-    size_t size() const{
-        return m_fields.size();
-    }
+    wamp_message& operator=(const wamp_message& other) = delete;
+    wamp_message& operator=(wamp_message&& other);
 
-    msgpack::unique_ptr<msgpack::zone> &zone(){
-        return m_zone;
-    }
+    /*!
+     * Retrieves the field at the specified index. Throws an exception
+     * if the index is out of bounds.
+     *
+     * @param index The index of the target field.
+     *
+     * @return The retrieved type.
+     */
+    const msgpack::object& field(std::size_t index) const;
 
-    message_type type() const{
-        return static_cast<message_type>(m_fields[0].as<int>());
-    }
+    /*!
+     * Retrieves the field at the specified index. Throws an exception
+     * if the index is out of bounds or if the field cannot be retrieved
+     * as the specified type.
+     *
+     * @tparam Type The field's type.
+     * @param index The index of the target field.
+     *
+     * @return The retrieved type.
+     */
+    template <typename Type>
+    Type field(std::size_t index);
 
-    std::string to_string(){
-        std::stringstream ss;
-        ss << '[';
-        for(size_t i = 0; i<m_fields.size(); ++i){
-            if(i>0){
-                ss<< ", ";
-            }
-            ss << m_fields[0];
-        }
-        ss << ']';
-        return ss.str();
-    }
+    /*!
+     * Sets the field at the specified index. Throws an exception if the
+     * index is out of bounds.
+     *
+     * @tparam Type The field's type.
+     * @param index The index of the target field.
+     * @param type The type to store in the target field.
+     */
+    template <typename Type>
+    void set_field(std::size_t index, const Type& type);
+
+    /*!
+     * Determines if the field at the specified index is of the given type.
+     *
+     * @param index The index of the target field.
+     * @param type The field type to check against.
+     */
+    bool is_field_type(std::size_t index, msgpack::type::object_type type) const;
+
+    /*!
+     * Retrieves the number of fields in the message.
+     *
+     * @return The number of fields in the message.
+     */
+    std::size_t size() const;
+
+    /*!
+     * The message fields.
+     *
+     * @return The message fields.
+     */
+    const message_fields& fields() const;
+
+    /*!
+     * Pilfers the message fields.
+     *
+     * @return The message fields.
+     */
+    message_fields&& fields();
+
+    /*!
+     * Pilfers the message zone.
+     *
+     * @return The message zone.
+     */
+    msgpack::zone&& zone();
+
 private:
-    std::vector<msgpack::object> m_fields;
-    msgpack::unique_ptr<msgpack::zone> m_zone;
+    /*!
+     * The zone used to allocate message fields. The zone must outlive
+     * the fields. If the fields are pilfered then the zone must also
+     * be pilferred and stored along with the fields.
+     */
+    msgpack::zone m_zone;
+
+    /*!
+     * The fields comprising of the message. It is up to the user of this
+     * class to ensure that a valid wamp message has been constructed.
+     */
+    message_fields m_fields;
 };
 
 } // namespace autobahn
+
+#include "wamp_message.ipp"
 
 #endif // AUTOBAHN_WAMP_MESSAGE_HPP

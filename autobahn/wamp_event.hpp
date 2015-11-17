@@ -21,6 +21,7 @@
 
 #include "wamp_arguments.hpp"
 
+#include <memory>
 #include <msgpack.hpp>
 #include <string>
 
@@ -249,6 +250,7 @@ public:
 
     void set_zone( msgpack::unique_ptr<msgpack::zone>& );
 private:
+    msgpack::zone m_zone;
     msgpack::object m_arguments;
     msgpack::object m_kw_arguments;
     msgpack::object m_details;
