@@ -316,7 +316,7 @@ void wamp_rawsocket_transport<Socket>::receive_message_body(
             wamp_message::message_fields fields;
             result.get().convert(fields);
 
-            wamp_message message(std::move(fields), std::move(*(result.zone())));
+            wamp_message message(std::move(fields), result.zone());
             m_handler->on_message(std::move(message));
         }
     }

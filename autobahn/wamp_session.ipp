@@ -29,6 +29,7 @@
 #include "wamp_subscription.hpp"
 #include "wamp_transport.hpp"
 #include "wamp_unsubscribe_request.hpp"
+#include "wamp_unregister_request.hpp"
 
 #if !(defined(_WIN32) || defined(WIN32))
 #include <arpa/inet.h>
@@ -122,31 +123,31 @@ inline boost::future<void> wamp_session::stop()
 
 inline boost::future<uint64_t> wamp_session::join(const std::string& realm)
 {
-    msgpack::zone zone;
+    msgpack::unique_ptr<msgpack::zone> zone(new msgpack::zone);
     std::unordered_map<std::string, msgpack::object> roles;
 
     std::unordered_map<std::string, bool> caller_features;
     caller_features["call_timeout"] = true;
     std::unordered_map<std::string, msgpack::object> caller;
-    caller["features"] = msgpack::object(caller_features, zone);
-    roles["caller"] = msgpack::object(caller, zone);
+    caller["features"] = msgpack::object(caller_features, *zone);
+    roles["caller"] = msgpack::object(caller, *zone);
 
     std::unordered_map<std::string, bool> callee_features;
     callee_features["call_timeout"] = true;
     std::unordered_map<std::string, msgpack::object> callee;
-    callee["features"] = msgpack::object(callee_features, zone);
-    roles["callee"] = msgpack::object(callee, zone);
+    callee["features"] = msgpack::object(callee_features, *zone);
+    roles["callee"] = msgpack::object(callee, *zone);
 
     std::unordered_map<std::string, msgpack::object> publisher;
-    roles["publisher"] = msgpack::object(publisher, zone);
+    roles["publisher"] = msgpack::object(publisher, *zone);
 
     std::unordered_map<std::string, msgpack::object> subscriber;
-    roles["subscriber"] = msgpack::object(subscriber, zone);
+    roles["subscriber"] = msgpack::object(subscriber, *zone);
 
     std::unordered_map<std::string, msgpack::object> details;
-    details["roles"] = msgpack::object(roles, zone);
+    details["roles"] = msgpack::object(roles, *zone);
 
-    auto message = std::make_shared<wamp_message>(3, std::move(zone));
+    auto message = std::make_shared<wamp_message>(3, zone);
     message->set_field(0, static_cast<int>(message_type::HELLO));
     message->set_field(1, realm);
     message->set_field(2, details);
@@ -303,14 +304,14 @@ inline boost::future<void> wamp_session::publish(
 }
 
 inline boost::future<wamp_subscription> wamp_session::subscribe(
-        const std::string& topic, const wamp_event_handler& handler)
+        const std::string& topic, const wamp_event_handler& handler, const subscribe_options options)
 {
     uint64_t request_id = ++m_request_id;
 
     auto message = std::make_shared<wamp_message>(4);
     message->set_field(0, static_cast<int>(message_type::SUBSCRIBE));
     message->set_field(1, request_id);
-    message->set_field(2, std::unordered_map<int, int>() /* No Options */);
+    message->set_field(2, options);
     message->set_field(3, topic);
 
     auto weak_self = std::weak_ptr<wamp_session>(this->shared_from_this());
@@ -498,6 +499,38 @@ inline boost::future<wamp_registration> wamp_session::provide(
 
     return register_request->response().get_future();
 }
+
+inline boost::future<void> wamp_session::unprovide(const wamp_registration& registration){
+    auto buffer = std::make_shared<msgpack::sbuffer>();
+    msgpack::packer<msgpack::sbuffer> packer(*buffer);
+    uint64_t request_id = ++m_request_id;
+
+    //[UNREGISTER, Request|id, REGISTERED.Registration|id]
+    auto message = std::make_shared<wamp_message>(3);
+    message->set_field(0, static_cast<int>(message_type::UNREGISTER));
+    message->set_field(1, request_id);
+    message->set_field(2, registration.id());
+
+    auto weak_self = std::weak_ptr<wamp_session>(this->shared_from_this());
+    auto unregister_request = std::make_shared<wamp_unregister_request>();
+
+    m_io_service.dispatch([=]() {
+        auto shared_self = weak_self.lock();
+        if (!shared_self) {
+          return;
+        }
+
+        try {
+          send(std::move(*message));
+          m_unregister_requests.emplace(request_id, unregister_request);
+        } catch (const std::exception& e) {
+          unregister_request->response().set_exception(boost::copy_exception(e));
+        }
+    });
+
+    return unregister_request->response().get_future();
+}
+
 
 inline void wamp_session::on_attach(const std::shared_ptr<wamp_transport>& transport)
 {
@@ -777,7 +810,7 @@ inline void wamp_session::process_invocation(wamp_message&& message)
             throw protocol_error("INVOCATION.Details must be a map");
         }
 
-        wamp_invocation invocation = std::make_shared<wamp_invocation_impl>();
+        wamp_invocation invocation = std::make_shared<wamp_invocation_impl>(message.zone());
         invocation->set_request_id(request_id);
 
         if (message.size() > 4) {
@@ -793,8 +826,6 @@ inline void wamp_session::process_invocation(wamp_message&& message)
                 invocation->set_kw_arguments(message.field(5));
             }
         }
-
-        invocation->set_zone(std::move(message.zone()));
 
         auto weak_this = std::weak_ptr<wamp_session>(this->shared_from_this());
 
@@ -868,7 +899,7 @@ inline void wamp_session::process_call_result(wamp_message&& message)
             throw protocol_error("RESULT - Details must be a dictionary");
         }
 
-        wamp_call_result result(std::move(message.zone()));
+        wamp_call_result result(message.zone());
         if (message.size() > 3) {
             if (!message.is_field_type(3, msgpack::type::ARRAY)) {
                 throw protocol_error("RESULT - YIELD.Arguments must be a list");
@@ -967,18 +998,18 @@ inline void wamp_session::process_event(wamp_message&& message)
             throw protocol_error("EVENT - Details must be a dictionary");
         }
 
-        wamp_event event(std::move(message.zone()));
+        wamp_event event = std::make_shared<wamp_event_impl>(message.zone());
         if (message.size() > 4) {
             if (!message.is_field_type(4, msgpack::type::ARRAY)) {
                 throw protocol_error("EVENT - EVENT.Arguments must be a list");
             }
-            event.set_arguments(message.field(4));
+            event->set_arguments(message.field(4));
 
             if (message.size() > 5) {
                 if (!message.is_field_type(5, msgpack::type::MAP)) {
                     throw protocol_error("EVENT - EVENT.ArgumentsKw must be a dictionary");
                 }
-                event.set_kw_arguments(message.field(5));
+                event->set_kw_arguments(message.field(5));
             }
         }
 

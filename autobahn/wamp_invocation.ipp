@@ -25,6 +25,16 @@
 
 namespace autobahn {
 
+inline wamp_invocation_impl::wamp_invocation_impl(msgpack::unique_ptr<msgpack::zone> &zone)
+    : m_zone(std::move(zone))
+    , m_details(EMPTY_DETAILS)
+    , m_arguments(EMPTY_ARGUMENTS)
+    , m_kw_arguments(EMPTY_KW_ARGUMENTS)
+    , m_send_result_fn()
+    , m_request_id(0)
+{
+}
+
 inline wamp_invocation_impl::wamp_invocation_impl()
     : m_zone()
     , m_details(EMPTY_DETAILS)
@@ -34,6 +44,7 @@ inline wamp_invocation_impl::wamp_invocation_impl()
     , m_request_id(0)
 {
 }
+
 
 template <typename T>
 T wamp_invocation_impl::detail(const std::string& key) const
@@ -312,11 +323,6 @@ inline void wamp_invocation_impl::set_request_id(std::uint64_t request_id)
 inline void wamp_invocation_impl::set_details(const msgpack::object& details)
 {
     m_details = details;
-}
-
-inline void wamp_invocation_impl::set_zone(msgpack::unique_ptr<msgpack::zone> &zone)
-{
-    m_zone = std::move(zone);
 }
 
 inline void wamp_invocation_impl::set_arguments(const msgpack::object& arguments)

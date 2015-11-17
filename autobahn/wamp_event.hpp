@@ -32,6 +32,7 @@ using subscribe_options = wamp_kw_arguments;
 class wamp_event_impl
 {
 public:
+    wamp_event_impl(msgpack::unique_ptr<msgpack::zone>& zone);
     wamp_event_impl();
     wamp_event_impl(wamp_event_impl&&) = delete; // copy wamp_event instead
 
@@ -247,10 +248,9 @@ public:
     void set_arguments(const msgpack::object& arguments);
     void set_kw_arguments(const msgpack::object& kw_arguments);
     void set_details(const msgpack::object& kw_arguments);
+    void set_zone(msgpack::unique_ptr<msgpack::zone>& zone);
 
-    void set_zone( msgpack::unique_ptr<msgpack::zone>& );
 private:
-    msgpack::zone m_zone;
     msgpack::object m_arguments;
     msgpack::object m_kw_arguments;
     msgpack::object m_details;

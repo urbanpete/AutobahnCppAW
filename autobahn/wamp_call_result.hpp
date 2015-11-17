@@ -185,6 +185,7 @@ private:
     uint64_t m_id;
     msgpack::object m_arguments;
     msgpack::object m_kw_arguments;
+    msgpack::unique_ptr<msgpack::zone> m_zone;
 };
 
 } // namespace autobahn

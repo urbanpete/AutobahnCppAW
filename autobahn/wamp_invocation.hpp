@@ -35,6 +35,7 @@ class wamp_invocation_impl
 {
 public:
     wamp_invocation_impl();
+    wamp_invocation_impl(msgpack::unique_ptr<msgpack::zone> &zone);
     wamp_invocation_impl(wamp_invocation_impl&&) = delete; // copy wamp_invocation instead
 
     /*!
@@ -250,7 +251,6 @@ public:
     void set_send_result_fn(send_result_fn&&);
     void set_request_id(std::uint64_t);
     void set_details(const msgpack::object& details);
-    void set_zone(msgpack::unique_ptr<msgpack::zone> &zone);
     void set_arguments(const msgpack::object& arguments);
     void set_kw_arguments(const msgpack::object& kw_arguments);
     bool sendable() const;

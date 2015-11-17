@@ -21,6 +21,14 @@
 
 namespace autobahn {
 
+inline wamp_event_impl::wamp_event_impl(msgpack::unique_ptr<msgpack::zone>& zone)
+    : m_arguments(EMPTY_ARGUMENTS)
+    , m_kw_arguments(EMPTY_KW_ARGUMENTS)
+    , m_details(EMPTY_DETAILS)
+    , m_zone(std::move(zone))
+{
+}
+
 inline wamp_event_impl::wamp_event_impl()
     : m_arguments(EMPTY_ARGUMENTS)
     , m_kw_arguments(EMPTY_KW_ARGUMENTS)
@@ -246,8 +254,7 @@ inline void wamp_event_impl::set_details(const msgpack::object& details)
     m_details = details;
 }
 
-inline void wamp_event_impl::set_zone( msgpack::unique_ptr<msgpack::zone>& zone)
-{
+inline void wamp_event_impl::set_zone( msgpack::unique_ptr<msgpack::zone>& zone ){
     m_zone = std::move(zone);
 }
 

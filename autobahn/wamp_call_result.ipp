@@ -31,14 +31,13 @@ inline wamp_call_result::wamp_call_result()
 }
 
 inline wamp_call_result::wamp_call_result( msgpack::unique_ptr<msgpack::zone> &zone)
-    :  m_id(0U)
+    : m_id(0U)
     , m_arguments(EMPTY_ARGUMENTS)
     , m_kw_arguments(EMPTY_KW_ARGUMENTS)
     , m_zone(std::move(zone))
 {
 }
 
-    m_id = other.m_id;
 inline wamp_call_result::wamp_call_result(wamp_call_result&& other)
     : m_id(other.m_id)
     , m_arguments(other.m_arguments)
@@ -49,7 +48,6 @@ inline wamp_call_result::wamp_call_result(wamp_call_result&& other)
     other.m_kw_arguments = EMPTY_KW_ARGUMENTS;
 }
 
-    m_id = other.m_id;
 inline wamp_call_result& wamp_call_result::operator=(wamp_call_result&& other)
 {
     if (this == &other) {

@@ -26,13 +26,13 @@ inline wamp_message::wamp_message(std::size_t num_fields)
 {
 }
 
-inline wamp_message::wamp_message(std::size_t num_fields, msgpack::zone&& zone)
+inline wamp_message::wamp_message(std::size_t num_fields, msgpack::unique_ptr<msgpack::zone>& zone)
     : m_zone(std::move(zone))
     , m_fields(num_fields)
 {
 }
 
-inline wamp_message::wamp_message(message_fields&& fields, msgpack::zone&& zone)
+inline wamp_message::wamp_message(message_fields&& fields,  msgpack::unique_ptr<msgpack::zone>& zone)
     : m_zone(std::move(zone))
     , m_fields(std::move(fields))
 {
@@ -82,7 +82,7 @@ inline void wamp_message::set_field(std::size_t index, const Type& type)
         throw std::out_of_range("invalid message field index");
     }
 
-    m_fields[index] = msgpack::object(type, m_zone);
+    m_fields[index] = msgpack::object(type, *m_zone);
 }
 
 inline bool wamp_message::is_field_type(std::size_t index, msgpack::type::object_type type) const
@@ -104,9 +104,9 @@ inline wamp_message::message_fields&& wamp_message::fields()
     return std::move(m_fields);
 }
 
-inline msgpack::zone&& wamp_message::zone()
+inline msgpack::unique_ptr<msgpack::zone>& wamp_message::zone()
 {
-    return std::move(m_zone);
+    return m_zone;
 }
 
 } // namespace autobahn
