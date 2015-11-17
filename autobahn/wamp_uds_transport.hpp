@@ -19,6 +19,8 @@
 #ifndef AUTOBAHN_WAMP_UDS_TRANSPORT_HPP
 #define AUTOBAHN_WAMP_UDS_TRANSPORT_HPP
 
+#if defined(BOOST_ASIO_HAS_LOCAL_SOCKETS)
+
 #include "wamp_rawsocket_transport.hpp"
 
 #include <boost/asio/local/stream_protocol.hpp>
@@ -34,4 +36,5 @@ using wamp_uds_transport =
 
 } // namespace autobahn
 
+#endif //defined(BOOST_ASIO_HAS_LOCAL_SOCKETS)
 #endif // AUTOBAHN_WAMP_UDS_TRANSPORT_HPP
