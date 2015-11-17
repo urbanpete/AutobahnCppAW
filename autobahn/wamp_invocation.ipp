@@ -22,10 +22,6 @@
 #include <stdexcept>
 #include <tuple>
 
-namespace{
-    static const msgpack::object EMPTY_DETAILS(std::unordered_map<std::string, msgpack::object>(), nullptr);
-}
-
 namespace autobahn {
 
 inline wamp_invocation_impl::wamp_invocation_impl()

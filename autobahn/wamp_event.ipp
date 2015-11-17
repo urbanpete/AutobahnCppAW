@@ -24,6 +24,7 @@ namespace autobahn {
 inline wamp_event_impl::wamp_event_impl()
     : m_arguments(EMPTY_ARGUMENTS)
     , m_kw_arguments(EMPTY_KW_ARGUMENTS)
+    , m_details(EMPTY_DETAILS)
     , m_zone()
 {
 }
