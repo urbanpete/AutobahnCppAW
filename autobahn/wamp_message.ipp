@@ -21,7 +21,7 @@
 namespace autobahn {
 
 inline wamp_message::wamp_message(std::size_t num_fields)
-    : m_zone()
+    : m_zone(new msgpack::zone())
     , m_fields(num_fields)
 {
 }

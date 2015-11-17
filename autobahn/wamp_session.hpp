@@ -166,7 +166,7 @@ public:
     boost::future<wamp_subscription> subscribe(
             const std::string& topic,
             const wamp_event_handler& handler,
-            const subscribe_options=subscribe_options());
+            const subscribe_options& options=subscribe_options());
 
     /*!
      * Unubscribe a handler to previosuly subscribed topic.
@@ -247,7 +247,7 @@ public:
 
 private:
     /// Handle error codes from the istream (filters out operation_aborted error), throws boost::system::system_error for all others
-    void handle_rx_error(const boost::system::error_code &error);
+    void handle_rx_error(const boost::system::error_code& error);
     virtual void on_attach(const std::shared_ptr<wamp_transport>& transport) override;
     virtual void on_detach(bool was_clean, const std::string& reason) override;
     virtual void on_message(wamp_message&& message) override;
@@ -259,6 +259,7 @@ private:
     void process_unsubscribed(wamp_message&& message);
     void process_event(wamp_message&& message);
     void process_registered(wamp_message&& message);
+    void process_unregistered(wamp_message&& message);
     void process_invocation(wamp_message&& message);
     void process_goodbye(wamp_message&& message);
 

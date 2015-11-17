@@ -253,6 +253,7 @@ public:
     void set_details(const msgpack::object& details);
     void set_arguments(const msgpack::object& arguments);
     void set_kw_arguments(const msgpack::object& kw_arguments);
+    void set_zone(msgpack::unique_ptr<msgpack::zone> &zone);
     bool sendable() const;
 
 private:

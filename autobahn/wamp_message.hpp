@@ -22,6 +22,7 @@
 #include <cstddef>
 #include <msgpack.hpp>
 #include <vector>
+#include "wamp_message_type.hpp"
 
 namespace autobahn {
 
@@ -145,6 +146,15 @@ public:
      * @return The message zone.
      */
     msgpack::unique_ptr<msgpack::zone> &zone();
+
+    /*!
+     * Gets the message type based on the enumerated wamp_message types
+     *
+     * @return the type of message based on the 1st field
+     */
+    message_type type(){
+        return static_cast<message_type>(field<int>(0));
+    }
 
 private:
     /*!

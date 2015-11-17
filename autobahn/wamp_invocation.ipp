@@ -335,6 +335,11 @@ inline void wamp_invocation_impl::set_kw_arguments(const msgpack::object& kw_arg
     m_kw_arguments = kw_arguments;
 }
 
+inline void wamp_invocation_impl::set_zone(msgpack::unique_ptr<msgpack::zone>& zone)
+{
+    m_zone = std::move(zone);
+}
+
 inline bool wamp_invocation_impl::sendable() const
 {
     return static_cast<bool>(m_send_result_fn);
