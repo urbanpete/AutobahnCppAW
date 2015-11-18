@@ -27,11 +27,11 @@ class wamp_error_impl{
 public:
     wamp_error_impl(message_type type,
                     uint64_t Id,
-                    const std::string &uri,
-                    const msgpack::object &details,
-                    const msgpack::object &args,
-                    const msgpack::object &kwargs,
-                    msgpack::unique_ptr<msgpack::zone> &zone)
+                    const std::string& uri,
+                    const msgpack::object& details,
+                    const msgpack::object& args,
+                    const msgpack::object& kwargs,
+                    msgpack::unique_ptr<msgpack::zone>& zone)
         : m_type(type)
         , m_id(Id)
         , m_details(details)
@@ -52,11 +52,11 @@ class wamp_error : public std::runtime_error {
   public:
     wamp_error(message_type type,
                uint64_t id,
-               const std::string &uri,
-               const msgpack::object &details,
-               const msgpack::object &args,
-               const msgpack::object &kwargs,
-               msgpack::unique_ptr<msgpack::zone> &zone)
+               const std::string& uri,
+               const msgpack::object& details,
+               const msgpack::object& args,
+               const msgpack::object& kwargs,
+               msgpack::unique_ptr<msgpack::zone>& zone)
              : std::runtime_error(uri)
     {
         m_impl = std::make_shared<wamp_error_impl>(type, id, uri, details, args, kwargs, zone);

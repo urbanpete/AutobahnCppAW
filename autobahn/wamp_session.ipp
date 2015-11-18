@@ -31,6 +31,7 @@
 #include "wamp_transport.hpp"
 #include "wamp_unsubscribe_request.hpp"
 #include "wamp_unregister_request.hpp"
+#include "wamp_message_factory.hpp"
 
 #if !(defined(_WIN32) || defined(WIN32))
 #include <arpa/inet.h>
@@ -689,77 +690,18 @@ inline void wamp_session::process_goodbye(wamp_message&& message)
 
 inline void wamp_session::process_error(wamp_message&& message)
 {
-    // [ERROR, REQUEST.Type|int, REQUEST.Request|id, Details|dict, Error|uri]
-    // [ERROR, REQUEST.Type|int, REQUEST.Request|id, Details|dict, Error|uri, Arguments|list]
-    // [ERROR, REQUEST.Type|int, REQUEST.Request|id, Details|dict, Error|uri, Arguments|list, ArgumentsKw|dict]
+    auto error = make_wamp_error(message);
 
-    if (message.size() < 5 || message.size() > 7) {
-        throw protocol_error("invalid ERROR message structure - length must be 5, 6 or 7");
-    }
-
-    // REQUEST.Type|int
-    //
-    if (!message.is_field_type(1, msgpack::type::POSITIVE_INTEGER)) {
-        throw protocol_error("invalid ERROR message structure - REQUEST.Type must be an integer");
-    }
-    auto request_type = static_cast<message_type>(message.field<int>(1));
-
-    if (request_type != message_type::CALL &&
-         request_type != message_type::REGISTER &&
-         request_type != message_type::UNREGISTER &&
-         request_type != message_type::PUBLISH &&
-         request_type != message_type::SUBSCRIBE &&
-         request_type != message_type::UNSUBSCRIBE) {
-        throw protocol_error("invalid ERROR message - ERROR.Type must one of CALL, REGISTER, UNREGISTER, SUBSCRIBE, UNSUBSCRIBE");
-    }
-
-    // REQUEST.Request|id
-    if (!message.is_field_type(2, msgpack::type::POSITIVE_INTEGER)) {
-        throw protocol_error("invalid ERROR message structure - REQUEST.Request must be an integer");
-    }
-    auto request_id = message.field<uint64_t>(2);
-
-    // Details
-    if (!message.is_field_type(3, msgpack::type::MAP)) {
-        throw protocol_error("invalid ERROR message structure - Details must be a dictionary");
-    }
-
-    // Error|uri
-    if (!message.is_field_type(4, msgpack::type::STR)) {
-        throw protocol_error("invalid ERROR message - Error must be a string (URI)");
-    }
-    std::string uri = message.field<std::string>(4);
-    msgpack::object args = EMPTY_ARGUMENTS;
-    msgpack::object kw_args = EMPTY_KW_ARGUMENTS;
-    msgpack::object details = message.field(3);
-
-    // Arguments|list
-    if (message.size() > 5) {
-        if (!message.is_field_type(5, msgpack::type::ARRAY)) {
-            throw protocol_error("invalid ERROR message structure - Arguments must be a list");
-        }
-        args = message.field(5);
-    }
-
-    // ArgumentsKw|list
-    if (message.size() > 6) {
-        if (!message.is_field_type(6, msgpack::type::MAP)) {
-            throw protocol_error("invalid ERROR message structure - ArgumentsKw must be a dictionary");
-        }
-        kw_args = message.field(6);
-    }
-
-    switch (request_type) {
+    switch (error.type()) {
 
         case message_type::CALL:
             {
                 //
                 // process CALL ERROR
                 //
-                auto call_itr = m_calls.find(request_id);
+                auto call_itr = m_calls.find(error.id());
 
                 if (call_itr != m_calls.end()) {
-                    auto error = wamp_error(request_type, request_id, uri, details, args, kw_args, message.zone());
                     call_itr->second->result().set_exception(std::move(error));
                 } else {
                     throw protocol_error("bogus ERROR message for non-pending CALL request ID");
@@ -872,39 +814,10 @@ inline void wamp_session::process_invocation(wamp_message&& message)
 
 inline void wamp_session::process_call_result(wamp_message&& message)
 {
-    // [RESULT, CALL.Request|id, Details|dict]
-    // [RESULT, CALL.Request|id, Details|dict, YIELD.Arguments|list]
-    // [RESULT, CALL.Request|id, Details|dict, YIELD.Arguments|list, YIELD.ArgumentsKw|dict]
+    auto result = make_wamp_call_result(message);
 
-    if (message.size() < 3 || message.size() > 5) {
-        throw protocol_error("RESULT - length must be 3, 4 or 5");
-    }
-
-    if (!message.is_field_type(1, msgpack::type::POSITIVE_INTEGER)) {
-        throw protocol_error("RESULT - CALL.Request must be an id");
-    }
-    uint64_t request_id = message.field<uint64_t>(1);
-
-    auto call_itr = m_calls.find(request_id);
+    auto call_itr = m_calls.find(result.id());
     if (call_itr != m_calls.end()) {
-        if (!message.is_field_type(2, msgpack::type::MAP)) {
-            throw protocol_error("RESULT - Details must be a dictionary");
-        }
-
-        wamp_call_result result(message.zone());
-        if (message.size() > 3) {
-            if (!message.is_field_type(3, msgpack::type::ARRAY)) {
-                throw protocol_error("RESULT - YIELD.Arguments must be a list");
-            }
-            result.set_arguments(message.field(3));
-
-            if (message.size() > 4) {
-                if (!message.is_field_type(4, msgpack::type::MAP)) {
-                    throw protocol_error("RESULT - YIELD.ArgumentsKw must be a dictionary");
-                }
-                result.set_kw_arguments(message.field(4));
-            }
-        }
         call_itr->second->set_result(std::move(result));
     } else {
         throw protocol_error("bogus RESULT message for non-pending request ID");

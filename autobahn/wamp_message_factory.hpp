@@ -35,7 +35,7 @@ inline wamp_error make_wamp_error(wamp_message& message){
 
     // message length
     //
-    if (message.size() != 5 && message.size() != 6 && message.size() != 7) {
+    if (message.size() < 5 || message.size() > 7) {
         throw protocol_error("invalid ERROR message structure - length must be 5, 6 or 7");
     }
 
@@ -44,7 +44,16 @@ inline wamp_error make_wamp_error(wamp_message& message){
     if (!message.is_field_type(1, msgpack::type::POSITIVE_INTEGER)) {
         throw protocol_error("invalid ERROR message structure - REQUEST.Type must be an integer");
     }
-    message_type request_type = static_cast<message_type>(message.field<int>(1));
+    auto request_type = static_cast<message_type>(message.field<int>(1));
+
+    if (request_type != message_type::CALL &&
+         request_type != message_type::REGISTER &&
+         request_type != message_type::UNREGISTER &&
+         request_type != message_type::PUBLISH &&
+         request_type != message_type::SUBSCRIBE &&
+         request_type != message_type::UNSUBSCRIBE) {
+        throw protocol_error("invalid ERROR message - ERROR.Type must one of CALL, REGISTER, UNREGISTER, SUBSCRIBE, UNSUBSCRIBE");
+    }
 
     // REQUEST.Request|id
     if (!message.is_field_type(2, msgpack::type::POSITIVE_INTEGER)) {
@@ -88,7 +97,7 @@ inline wamp_call_result make_wamp_call_result(wamp_message& message){
     // [RESULT, CALL.Request|id, Details|dict, YIELD.Arguments|list, YIELD.ArgumentsKw|dict]
     auto result = wamp_call_result(message.zone());
 
-    if (message.size() != 3 && message.size() != 4 && message.size() != 5) {
+    if (message.size() < 3 || message.size() > 5) {
         throw protocol_error("RESULT - length must be 3, 4 or 5");
     }
 
