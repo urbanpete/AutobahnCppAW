@@ -15,13 +15,12 @@
 //  limitations under the License.
 //
 ///////////////////////////////////////////////////////////////////////////////
-
-#include "../parameters.hpp"
+#include "parameters.hpp"
 
 #include <autobahn/autobahn.hpp>
 #include <boost/asio.hpp>
-#include <boost/version.hpp>
 #include <chrono>
+#include <functional>
 #include <iostream>
 #include <memory>
 #include <string>
@@ -29,14 +28,12 @@
 
 int main(int argc, char** argv)
 {
-    std::cerr << "Boost: " << BOOST_VERSION << std::endl;
-
     try {
         auto parameters = get_parameters(argc, argv);
 
         boost::asio::io_service io;
         auto transport = std::make_shared<autobahn::wamp_tcp_transport>(
-                io, parameters->rawsocket_endpoint());
+                io, parameters->rawsocket_endpoint(), true);
 
         bool debug = parameters->debug();
         auto session = std::make_shared<autobahn::wamp_session>(io, debug);
@@ -51,7 +48,6 @@ int main(int argc, char** argv)
         boost::future<void> connect_future;
         boost::future<void> start_future;
         boost::future<void> join_future;
-        boost::future<void> call_future;
         boost::future<void> leave_future;
         boost::future<void> stop_future;
 
@@ -63,6 +59,7 @@ int main(int argc, char** argv)
                 io.stop();
                 return;
             }
+
             std::cerr << "transport connected" << std::endl;
 
             start_future = session->start().then([&](boost::future<void> started) {
@@ -85,34 +82,22 @@ int main(int argc, char** argv)
                         return;
                     }
 
-                    autobahn::wamp_call_options call_options;
-                    call_options.set_timeout(std::chrono::seconds(10));
+                    std::tuple<std::string> arguments(std::string("hello"));
+                    session->publish("com.examples.subscriptions.topic1", arguments);
+                    std::cerr << "event published" << std::endl;
 
-                    std::tuple<uint64_t, uint64_t> arguments(23, 777);
-                    call_future = session->call("com.examples.calculator.add", arguments, call_options).then(
-                    [&](boost::future<autobahn::wamp_call_result> result) {
+                    leave_future = session->leave().then([&](boost::future<std::string> reason) {
                         try {
-                            uint64_t sum = result.get().argument<uint64_t>(0);
-                            std::cerr << "call result: " << sum << std::endl;
+                            std::cerr << "left session (" << reason.get() << ")" << std::endl;
                         } catch (const std::exception& e) {
-                            std::cerr << "call failed: " << e.what() << std::endl;
+                            std::cerr << "failed to leave session: " << e.what() << std::endl;
                             io.stop();
                             return;
                         }
 
-                        leave_future = session->leave().then([&](boost::future<std::string> reason) {
-                            try {
-                                std::cerr << "left session (" << reason.get() << ")" << std::endl;
-                            } catch (const std::exception& e) {
-                                std::cerr << "failed to leave session: " << e.what() << std::endl;
-                                io.stop();
-                                return;
-                            }
-
-                            stop_future = session->stop().then([&](boost::future<void> stopped) {
-                                std::cerr << "stopped session" << std::endl;
-                                io.stop();
-                            });
+                        stop_future = session->stop().then([&](boost::future<void> stopped) {
+                            std::cerr << "stopped session" << std::endl;
+                            io.stop();
                         });
                     });
                 });
@@ -129,6 +114,5 @@ int main(int argc, char** argv)
         std::cerr << e.what() << std::endl;
         return 1;
     }
-
     return 0;
 }

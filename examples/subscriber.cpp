@@ -15,22 +15,25 @@
 //  limitations under the License.
 //
 ///////////////////////////////////////////////////////////////////////////////
-
-#include "../parameters.hpp"
+#include "parameters.hpp"
 
 #include <autobahn/autobahn.hpp>
 #include <boost/asio.hpp>
-#include <chrono>
-#include <functional>
 #include <iostream>
 #include <memory>
-#include <string>
 #include <tuple>
+
+void topic1(const autobahn::wamp_event& event)
+{
+    std::cerr << "received event: " << event.argument<uint64_t>(0) << std::endl;
+}
 
 int main(int argc, char** argv)
 {
     try {
         auto parameters = get_parameters(argc, argv);
+
+        std::cerr << "realm: " << parameters->realm() << std::endl;
 
         boost::asio::io_service io;
         auto transport = std::make_shared<autobahn::wamp_tcp_transport>(
@@ -49,8 +52,6 @@ int main(int argc, char** argv)
         boost::future<void> connect_future;
         boost::future<void> start_future;
         boost::future<void> join_future;
-        boost::future<void> leave_future;
-        boost::future<void> stop_future;
 
         connect_future = transport->connect().then([&](boost::future<void> connected) {
             try {
@@ -83,24 +84,7 @@ int main(int argc, char** argv)
                         return;
                     }
 
-                    std::tuple<std::string> arguments(std::string("hello"));
-                    session->publish("com.examples.subscriptions.topic1", arguments);
-                    std::cerr << "event published" << std::endl;
-
-                    leave_future = session->leave().then([&](boost::future<std::string> reason) {
-                        try {
-                            std::cerr << "left session (" << reason.get() << ")" << std::endl;
-                        } catch (const std::exception& e) {
-                            std::cerr << "failed to leave session: " << e.what() << std::endl;
-                            io.stop();
-                            return;
-                        }
-
-                        stop_future = session->stop().then([&](boost::future<void> stopped) {
-                            std::cerr << "stopped session" << std::endl;
-                            io.stop();
-                        });
-                    });
+                    session->subscribe("com.examples.subscriptions.topic1", &topic1);
                 });
             });
         });
@@ -108,10 +92,8 @@ int main(int argc, char** argv)
         std::cerr << "starting io service" << std::endl;
         io.run();
         std::cerr << "stopped io service" << std::endl;
-
-        transport->detach();
     }
-    catch (const std::exception& e) {
+    catch (std::exception& e) {
         std::cerr << e.what() << std::endl;
         return 1;
     }

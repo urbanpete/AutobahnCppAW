@@ -15,35 +15,27 @@
 //  limitations under the License.
 //
 ///////////////////////////////////////////////////////////////////////////////
-
-#include "../parameters.hpp"
+#include "parameters.hpp"
 
 #include <autobahn/autobahn.hpp>
 #include <boost/asio.hpp>
 #include <boost/version.hpp>
+#include <chrono>
 #include <iostream>
 #include <memory>
 #include <string>
-#include <thread>
 #include <tuple>
-
-void add(autobahn::wamp_invocation invocation)
-{
-    auto a = invocation->argument<uint64_t>(0);
-    auto b = invocation->argument<uint64_t>(1);
-
-    invocation->result(std::make_tuple(a + b));
-}
 
 int main(int argc, char** argv)
 {
     std::cerr << "Boost: " << BOOST_VERSION << std::endl;
+
     try {
         auto parameters = get_parameters(argc, argv);
 
         boost::asio::io_service io;
         auto transport = std::make_shared<autobahn::wamp_tcp_transport>(
-                io, parameters->rawsocket_endpoint(), true);
+                io, parameters->rawsocket_endpoint());
 
         bool debug = parameters->debug();
         auto session = std::make_shared<autobahn::wamp_session>(io, debug);
@@ -58,7 +50,9 @@ int main(int argc, char** argv)
         boost::future<void> connect_future;
         boost::future<void> start_future;
         boost::future<void> join_future;
-        boost::future<void> provide_future;
+        boost::future<void> call_future;
+        boost::future<void> leave_future;
+        boost::future<void> stop_future;
 
         connect_future = transport->connect().then([&](boost::future<void> connected) {
             try {
@@ -68,7 +62,6 @@ int main(int argc, char** argv)
                 io.stop();
                 return;
             }
-
             std::cerr << "transport connected" << std::endl;
 
             start_future = session->start().then([&](boost::future<void> started) {
@@ -91,15 +84,35 @@ int main(int argc, char** argv)
                         return;
                     }
 
-                    provide_future = session->provide("com.examples.calculator.add", &add).then(
-                        [&](boost::future<autobahn::wamp_registration> registration) {
+                    autobahn::wamp_call_options call_options;
+                    call_options.set_timeout(std::chrono::seconds(10));
+
+                    std::tuple<uint64_t, uint64_t> arguments(23, 777);
+                    call_future = session->call("com.examples.calculator.add", arguments, call_options).then(
+                    [&](boost::future<autobahn::wamp_call_result> result) {
                         try {
-                            std::cerr << "registered procedure:" << registration.get().id() << std::endl;
+                            uint64_t sum = result.get().argument<uint64_t>(0);
+                            std::cerr << "call result: " << sum << std::endl;
                         } catch (const std::exception& e) {
-                            std::cerr << e.what() << std::endl;
+                            std::cerr << "call failed: " << e.what() << std::endl;
                             io.stop();
                             return;
                         }
+
+                        leave_future = session->leave().then([&](boost::future<std::string> reason) {
+                            try {
+                                std::cerr << "left session (" << reason.get() << ")" << std::endl;
+                            } catch (const std::exception& e) {
+                                std::cerr << "failed to leave session: " << e.what() << std::endl;
+                                io.stop();
+                                return;
+                            }
+
+                            stop_future = session->stop().then([&](boost::future<void> stopped) {
+                                std::cerr << "stopped session" << std::endl;
+                                io.stop();
+                            });
+                        });
                     });
                 });
             });
@@ -108,10 +121,12 @@ int main(int argc, char** argv)
         std::cerr << "starting io service" << std::endl;
         io.run();
         std::cerr << "stopped io service" << std::endl;
+
+        transport->detach();
     }
     catch (const std::exception& e) {
-        std::cerr << "exception: " << e.what() << std::endl;
-        return -1;
+        std::cerr << e.what() << std::endl;
+        return 1;
     }
 
     return 0;

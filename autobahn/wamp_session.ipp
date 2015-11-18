@@ -693,9 +693,7 @@ inline void wamp_session::process_error(wamp_message&& message)
     // [ERROR, REQUEST.Type|int, REQUEST.Request|id, Details|dict, Error|uri, Arguments|list]
     // [ERROR, REQUEST.Type|int, REQUEST.Request|id, Details|dict, Error|uri, Arguments|list, ArgumentsKw|dict]
 
-    // message length
-    //
-    if (message.size() != 5 && message.size() != 6 && message.size() != 7) {
+    if (message.size() < 5 || message.size() > 7) {
         throw protocol_error("invalid ERROR message structure - length must be 5, 6 or 7");
     }
 
@@ -704,7 +702,7 @@ inline void wamp_session::process_error(wamp_message&& message)
     if (!message.is_field_type(1, msgpack::type::POSITIVE_INTEGER)) {
         throw protocol_error("invalid ERROR message structure - REQUEST.Type must be an integer");
     }
-    message_type request_type = static_cast<message_type>(message.field<int>(1));
+    auto request_type = static_cast<message_type>(message.field<int>(1));
 
     if (request_type != message_type::CALL &&
          request_type != message_type::REGISTER &&
@@ -719,7 +717,7 @@ inline void wamp_session::process_error(wamp_message&& message)
     if (!message.is_field_type(2, msgpack::type::POSITIVE_INTEGER)) {
         throw protocol_error("invalid ERROR message structure - REQUEST.Request must be an integer");
     }
-    uint64_t request_id = message.field<uint64_t>(2);
+    auto request_id = message.field<uint64_t>(2);
 
     // Details
     if (!message.is_field_type(3, msgpack::type::MAP)) {
@@ -745,7 +743,7 @@ inline void wamp_session::process_error(wamp_message&& message)
 
     // ArgumentsKw|list
     if (message.size() > 6) {
-        if (message.is_field_type(6, msgpack::type::MAP)) {
+        if (!message.is_field_type(6, msgpack::type::MAP)) {
             throw protocol_error("invalid ERROR message structure - ArgumentsKw must be a dictionary");
         }
         kw_args = message.field(6);
@@ -771,8 +769,8 @@ inline void wamp_session::process_error(wamp_message&& message)
 
         // FIXME: handle other error messages
         default:
-            // TODO: We should at least assert or throw here.
-            std::cerr << "unhandled ERROR message" << std::endl;
+            throw protocol_error("unhandled ERROR message");
+            break;
     }
 }
 

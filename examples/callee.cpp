@@ -15,26 +15,30 @@
 //  limitations under the License.
 //
 ///////////////////////////////////////////////////////////////////////////////
-
-#include "../parameters.hpp"
+#include "parameters.hpp"
 
 #include <autobahn/autobahn.hpp>
 #include <boost/asio.hpp>
+#include <boost/version.hpp>
 #include <iostream>
 #include <memory>
+#include <string>
+#include <thread>
 #include <tuple>
 
-void topic1(const autobahn::wamp_event& event)
+void add(autobahn::wamp_invocation invocation)
 {
-    std::cerr << "received event: " << event->argument<uint64_t>(0) << std::endl;
+    auto a = invocation->argument<uint64_t>(0);
+    auto b = invocation->argument<uint64_t>(1);
+
+    invocation->result(std::make_tuple(a + b));
 }
 
 int main(int argc, char** argv)
 {
+    std::cerr << "Boost: " << BOOST_VERSION << std::endl;
     try {
         auto parameters = get_parameters(argc, argv);
-
-        std::cerr << "realm: " << parameters->realm() << std::endl;
 
         boost::asio::io_service io;
         auto transport = std::make_shared<autobahn::wamp_tcp_transport>(
@@ -53,6 +57,7 @@ int main(int argc, char** argv)
         boost::future<void> connect_future;
         boost::future<void> start_future;
         boost::future<void> join_future;
+        boost::future<void> provide_future;
 
         connect_future = transport->connect().then([&](boost::future<void> connected) {
             try {
@@ -85,7 +90,16 @@ int main(int argc, char** argv)
                         return;
                     }
 
-                    session->subscribe("com.examples.subscriptions.topic1", &topic1);
+                    provide_future = session->provide("com.examples.calculator.add", &add).then(
+                        [&](boost::future<autobahn::wamp_registration> registration) {
+                        try {
+                            std::cerr << "registered procedure:" << registration.get().id() << std::endl;
+                        } catch (const std::exception& e) {
+                            std::cerr << e.what() << std::endl;
+                            io.stop();
+                            return;
+                        }
+                    });
                 });
             });
         });
@@ -94,9 +108,10 @@ int main(int argc, char** argv)
         io.run();
         std::cerr << "stopped io service" << std::endl;
     }
-    catch (std::exception& e) {
-        std::cerr << e.what() << std::endl;
-        return 1;
+    catch (const std::exception& e) {
+        std::cerr << "exception: " << e.what() << std::endl;
+        return -1;
     }
+
     return 0;
 }
