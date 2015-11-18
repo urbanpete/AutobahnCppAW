@@ -42,8 +42,6 @@ set(PUBLIC_HEADERS
     ${CMAKE_CURRENT_SOURCE_DIR}/autobahn/wamp_call_options.ipp
     ${CMAKE_CURRENT_SOURCE_DIR}/autobahn/wamp_call_result.hpp
     ${CMAKE_CURRENT_SOURCE_DIR}/autobahn/wamp_call_result.ipp
-    ${CMAKE_CURRENT_SOURCE_DIR}/autobahn/wamp_component.hpp
-    ${CMAKE_CURRENT_SOURCE_DIR}/autobahn/wamp_component.ipp
     ${CMAKE_CURRENT_SOURCE_DIR}/autobahn/wamp_event.hpp
     ${CMAKE_CURRENT_SOURCE_DIR}/autobahn/wamp_event.ipp
     ${CMAKE_CURRENT_SOURCE_DIR}/autobahn/wamp_event_handler.hpp
@@ -52,8 +50,6 @@ set(PUBLIC_HEADERS
     ${CMAKE_CURRENT_SOURCE_DIR}/autobahn/wamp_message.hpp
     ${CMAKE_CURRENT_SOURCE_DIR}/autobahn/wamp_message.ipp
     ${CMAKE_CURRENT_SOURCE_DIR}/autobahn/wamp_message_type.hpp
-    ${CMAKE_CURRENT_SOURCE_DIR}/autobahn/wamp_network_component.hpp
-    ${CMAKE_CURRENT_SOURCE_DIR}/autobahn/wamp_network_component.ipp
     ${CMAKE_CURRENT_SOURCE_DIR}/autobahn/wamp_procedure.hpp
     ${CMAKE_CURRENT_SOURCE_DIR}/autobahn/wamp_publication.hpp
     ${CMAKE_CURRENT_SOURCE_DIR}/autobahn/wamp_publication.ipp
