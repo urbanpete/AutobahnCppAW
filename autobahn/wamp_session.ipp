@@ -691,8 +691,18 @@ inline void wamp_session::process_goodbye(wamp_message&& message)
 inline void wamp_session::process_error(wamp_message&& message)
 {
     auto error = make_wamp_error(message);
+	auto request_type = error.type();
 
-    switch (error.type()) {
+	if (request_type != message_type::CALL &&
+         request_type != message_type::REGISTER &&
+         request_type != message_type::UNREGISTER &&
+         request_type != message_type::PUBLISH &&
+         request_type != message_type::SUBSCRIBE &&
+         request_type != message_type::UNSUBSCRIBE) {
+        throw protocol_error("invalid ERROR message - ERROR.Type must one of CALL, REGISTER, UNREGISTER, SUBSCRIBE, UNSUBSCRIBE");
+    }
+
+    switch (request_type) {
 
         case message_type::CALL:
             {

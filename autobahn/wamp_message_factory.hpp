@@ -46,15 +46,6 @@ inline wamp_error make_wamp_error(wamp_message& message){
     }
     auto request_type = static_cast<message_type>(message.field<int>(1));
 
-    if (request_type != message_type::CALL &&
-         request_type != message_type::REGISTER &&
-         request_type != message_type::UNREGISTER &&
-         request_type != message_type::PUBLISH &&
-         request_type != message_type::SUBSCRIBE &&
-         request_type != message_type::UNSUBSCRIBE) {
-        throw protocol_error("invalid ERROR message - ERROR.Type must one of CALL, REGISTER, UNREGISTER, SUBSCRIBE, UNSUBSCRIBE");
-    }
-
     // REQUEST.Request|id
     if (!message.is_field_type(2, msgpack::type::POSITIVE_INTEGER)) {
         throw protocol_error("invalid ERROR message structure - REQUEST.Request must be an integer");
