@@ -18,6 +18,7 @@
 
 #include "exceptions.hpp"
 #include "wamp_call.hpp"
+#include "wamp_error.hpp"
 #include "wamp_event.hpp"
 #include "wamp_invocation.hpp"
 #include "wamp_message.hpp"
@@ -29,6 +30,8 @@
 #include "wamp_subscription.hpp"
 #include "wamp_transport.hpp"
 #include "wamp_unsubscribe_request.hpp"
+#include "wamp_unregister_request.hpp"
+#include "wamp_message_factory.hpp"
 
 #if !(defined(_WIN32) || defined(WIN32))
 #include <arpa/inet.h>
@@ -55,6 +58,7 @@ inline wamp_session::wamp_session(
     , m_goodbye_sent(false)
     , m_running(false)
 {
+
 }
 
 inline wamp_session::~wamp_session()
@@ -122,31 +126,31 @@ inline boost::future<void> wamp_session::stop()
 
 inline boost::future<uint64_t> wamp_session::join(const std::string& realm)
 {
-    msgpack::zone zone;
+    msgpack::unique_ptr<msgpack::zone> zone(new msgpack::zone);
     std::unordered_map<std::string, msgpack::object> roles;
 
     std::unordered_map<std::string, bool> caller_features;
     caller_features["call_timeout"] = true;
     std::unordered_map<std::string, msgpack::object> caller;
-    caller["features"] = msgpack::object(caller_features, zone);
-    roles["caller"] = msgpack::object(caller, zone);
+    caller["features"] = msgpack::object(caller_features, *zone);
+    roles["caller"] = msgpack::object(caller, *zone);
 
     std::unordered_map<std::string, bool> callee_features;
     callee_features["call_timeout"] = true;
     std::unordered_map<std::string, msgpack::object> callee;
-    callee["features"] = msgpack::object(callee_features, zone);
-    roles["callee"] = msgpack::object(callee, zone);
+    callee["features"] = msgpack::object(callee_features, *zone);
+    roles["callee"] = msgpack::object(callee, *zone);
 
     std::unordered_map<std::string, msgpack::object> publisher;
-    roles["publisher"] = msgpack::object(publisher, zone);
+    roles["publisher"] = msgpack::object(publisher, *zone);
 
     std::unordered_map<std::string, msgpack::object> subscriber;
-    roles["subscriber"] = msgpack::object(subscriber, zone);
+    roles["subscriber"] = msgpack::object(subscriber, *zone);
 
     std::unordered_map<std::string, msgpack::object> details;
-    details["roles"] = msgpack::object(roles, zone);
+    details["roles"] = msgpack::object(roles, *zone);
 
-    auto message = std::make_shared<wamp_message>(3, std::move(zone));
+    auto message = std::make_shared<wamp_message>(3, zone);
     message->set_field(0, static_cast<int>(message_type::HELLO));
     message->set_field(1, realm);
     message->set_field(2, details);
@@ -303,14 +307,14 @@ inline boost::future<void> wamp_session::publish(
 }
 
 inline boost::future<wamp_subscription> wamp_session::subscribe(
-        const std::string& topic, const wamp_event_handler& handler)
+        const std::string& topic, const wamp_event_handler& handler, const subscribe_options& options)
 {
     uint64_t request_id = ++m_request_id;
 
     auto message = std::make_shared<wamp_message>(4);
     message->set_field(0, static_cast<int>(message_type::SUBSCRIBE));
     message->set_field(1, request_id);
-    message->set_field(2, std::unordered_map<int, int>() /* No Options */);
+    message->set_field(2, options);
     message->set_field(3, topic);
 
     auto weak_self = std::weak_ptr<wamp_session>(this->shared_from_this());
@@ -499,6 +503,38 @@ inline boost::future<wamp_registration> wamp_session::provide(
     return register_request->response().get_future();
 }
 
+inline boost::future<void> wamp_session::unprovide(const wamp_registration& registration){
+    auto buffer = std::make_shared<msgpack::sbuffer>();
+    msgpack::packer<msgpack::sbuffer> packer(*buffer);
+    uint64_t request_id = ++m_request_id;
+
+    //[UNREGISTER, Request|id, REGISTERED.Registration|id]
+    auto message = std::make_shared<wamp_message>(3);
+    message->set_field(0, static_cast<int>(message_type::UNREGISTER));
+    message->set_field(1, request_id);
+    message->set_field(2, registration.id());
+
+    auto weak_self = std::weak_ptr<wamp_session>(this->shared_from_this());
+    auto unregister_request = std::make_shared<wamp_unregister_request>();
+
+    m_io_service.dispatch([=]() {
+        auto shared_self = weak_self.lock();
+        if (!shared_self) {
+          return;
+        }
+
+        try {
+          send(std::move(*message));
+          m_unregister_requests.emplace(request_id, unregister_request);
+        } catch (const std::exception& e) {
+          unregister_request->response().set_exception(boost::copy_exception(e));
+        }
+    });
+
+    return unregister_request->response().get_future();
+}
+
+
 inline void wamp_session::on_attach(const std::shared_ptr<wamp_transport>& transport)
 {
     // FIXME: We should be deferring this operation to the io service. This
@@ -612,7 +648,7 @@ inline void wamp_session::on_message(wamp_message&& message)
         case message_type::UNREGISTER:
             throw protocol_error("received UNREGISTER message unexpected for WAMP client roles");
         case message_type::UNREGISTERED:
-            // FIXME
+            process_unregistered(std::move(message));
             break;
         case message_type::INVOCATION:
             process_invocation(std::move(message));
@@ -654,73 +690,16 @@ inline void wamp_session::process_goodbye(wamp_message&& message)
 
 inline void wamp_session::process_error(wamp_message&& message)
 {
-    // [ERROR, REQUEST.Type|int, REQUEST.Request|id, Details|dict, Error|uri]
-    // [ERROR, REQUEST.Type|int, REQUEST.Request|id, Details|dict, Error|uri, Arguments|list]
-    // [ERROR, REQUEST.Type|int, REQUEST.Request|id, Details|dict, Error|uri, Arguments|list, ArgumentsKw|dict]
+    auto error = make_wamp_error(message);
+	auto request_type = error.type();
 
-    if (message.size() < 5 || message.size() > 7) {
-        throw protocol_error("invalid ERROR message structure - length must be 5, 6 or 7");
-    }
-
-    // REQUEST.Type|int
-    //
-    if (!message.is_field_type(1, msgpack::type::POSITIVE_INTEGER)) {
-        throw protocol_error("invalid ERROR message structure - REQUEST.Type must be an integer");
-    }
-    auto request_type = static_cast<message_type>(message.field<int>(1));
-
-    if (request_type != message_type::CALL &&
+	if (request_type != message_type::CALL &&
          request_type != message_type::REGISTER &&
          request_type != message_type::UNREGISTER &&
          request_type != message_type::PUBLISH &&
          request_type != message_type::SUBSCRIBE &&
          request_type != message_type::UNSUBSCRIBE) {
         throw protocol_error("invalid ERROR message - ERROR.Type must one of CALL, REGISTER, UNREGISTER, SUBSCRIBE, UNSUBSCRIBE");
-    }
-
-    // REQUEST.Request|id
-    if (!message.is_field_type(2, msgpack::type::POSITIVE_INTEGER)) {
-        throw protocol_error("invalid ERROR message structure - REQUEST.Request must be an integer");
-    }
-    auto request_id = message.field<uint64_t>(2);
-
-    // Details
-    if (!message.is_field_type(3, msgpack::type::MAP)) {
-        throw protocol_error("invalid ERROR message structure - Details must be a dictionary");
-    }
-
-    // Error|uri
-    if (!message.is_field_type(4, msgpack::type::STR)) {
-        throw protocol_error("invalid ERROR message - Error must be a string (URI)");
-    }
-    auto error = std::move(message.field<std::string>(4));
-
-    // Arguments|list
-    if (message.size() > 5) {
-        if (!message.is_field_type(5, msgpack::type::ARRAY)) {
-            throw protocol_error("invalid ERROR message structure - Arguments must be a list");
-        }
-    }
-
-    // ArgumentsKw|list
-    if (message.size() > 6) {
-        if (!message.is_field_type(6, msgpack::type::MAP)) {
-            throw protocol_error("invalid ERROR message structure - ArgumentsKw must be a dictionary");
-        }
-        try {
-            auto kw_args = message.field<std::unordered_map<std::string, std::string>>(6);
-            const auto itr = kw_args.find("what");
-            if (itr != kw_args.end()) {
-                error += ": ";
-                error += itr->second;
-            }
-        } catch (const std::exception& e) {
-            if (m_debug_enabled) {
-                std::cerr << "failed to parse error message keyword arguments" << std::endl;
-            }
-
-            error += ": unknown exception";
-        }
     }
 
     switch (request_type) {
@@ -730,13 +709,10 @@ inline void wamp_session::process_error(wamp_message&& message)
                 //
                 // process CALL ERROR
                 //
-                auto call_itr = m_calls.find(request_id);
+                auto call_itr = m_calls.find(error.id());
 
                 if (call_itr != m_calls.end()) {
-
-                    // FIXME: Forward all error info.
-                    call_itr->second->result().set_exception(std::runtime_error(error));
-
+                    call_itr->second->result().set_exception(std::move(error));
                 } else {
                     throw protocol_error("bogus ERROR message for non-pending CALL request ID");
                 }
@@ -777,8 +753,9 @@ inline void wamp_session::process_invocation(wamp_message&& message)
             throw protocol_error("INVOCATION.Details must be a map");
         }
 
-        wamp_invocation invocation = std::make_shared<wamp_invocation_impl>();
+        wamp_invocation invocation = std::make_shared<wamp_invocation_impl>(message.zone());
         invocation->set_request_id(request_id);
+        invocation->set_details(message.field(3));
 
         if (message.size() > 4) {
             if (!message.is_field_type(4, msgpack::type::ARRAY)) {
@@ -793,8 +770,6 @@ inline void wamp_session::process_invocation(wamp_message&& message)
                 invocation->set_kw_arguments(message.field(5));
             }
         }
-
-        invocation->set_zone(std::move(message.zone()));
 
         auto weak_this = std::weak_ptr<wamp_session>(this->shared_from_this());
 
@@ -849,39 +824,10 @@ inline void wamp_session::process_invocation(wamp_message&& message)
 
 inline void wamp_session::process_call_result(wamp_message&& message)
 {
-    // [RESULT, CALL.Request|id, Details|dict]
-    // [RESULT, CALL.Request|id, Details|dict, YIELD.Arguments|list]
-    // [RESULT, CALL.Request|id, Details|dict, YIELD.Arguments|list, YIELD.ArgumentsKw|dict]
+    auto result = make_wamp_call_result(message);
 
-    if (message.size() < 3 || message.size() > 5) {
-        throw protocol_error("RESULT - length must be 3, 4 or 5");
-    }
-
-    if (!message.is_field_type(1, msgpack::type::POSITIVE_INTEGER)) {
-        throw protocol_error("RESULT - CALL.Request must be an id");
-    }
-    uint64_t request_id = message.field<uint64_t>(1);
-
-    auto call_itr = m_calls.find(request_id);
+    auto call_itr = m_calls.find(result.id());
     if (call_itr != m_calls.end()) {
-        if (!message.is_field_type(2, msgpack::type::MAP)) {
-            throw protocol_error("RESULT - Details must be a dictionary");
-        }
-
-        wamp_call_result result(std::move(message.zone()));
-        if (message.size() > 3) {
-            if (!message.is_field_type(3, msgpack::type::ARRAY)) {
-                throw protocol_error("RESULT - YIELD.Arguments must be a list");
-            }
-            result.set_arguments(message.field(3));
-
-            if (message.size() > 4) {
-                if (!message.is_field_type(4, msgpack::type::MAP)) {
-                    throw protocol_error("RESULT - YIELD.ArgumentsKw must be a dictionary");
-                }
-                result.set_kw_arguments(message.field(4));
-            }
-        }
         call_itr->second->set_result(std::move(result));
     } else {
         throw protocol_error("bogus RESULT message for non-pending request ID");
@@ -961,24 +907,25 @@ inline void wamp_session::process_event(wamp_message&& message)
         if (!message.is_field_type(2, msgpack::type::POSITIVE_INTEGER)) {
             throw protocol_error("EVENT - PUBLISHED.Publication must be an id");
         }
-        //uint64_t publication_id = message[2].as<uint64_t>();
 
         if (!message.is_field_type(3, msgpack::type::MAP)) {
             throw protocol_error("EVENT - Details must be a dictionary");
         }
 
-        wamp_event event(std::move(message.zone()));
+        wamp_event event = std::make_shared<wamp_event_impl>(message.zone());
+        event->set_details(message.field(3));
+
         if (message.size() > 4) {
             if (!message.is_field_type(4, msgpack::type::ARRAY)) {
                 throw protocol_error("EVENT - EVENT.Arguments must be a list");
             }
-            event.set_arguments(message.field(4));
+            event->set_arguments(message.field(4));
 
             if (message.size() > 5) {
                 if (!message.is_field_type(5, msgpack::type::MAP)) {
                     throw protocol_error("EVENT - EVENT.ArgumentsKw must be a dictionary");
                 }
-                event.set_kw_arguments(message.field(5));
+                event->set_kw_arguments(message.field(5));
             }
         }
 
@@ -1029,6 +976,27 @@ inline void wamp_session::process_registered(wamp_message&& message)
         register_request_itr->second->set_response(wamp_registration(registration_id));
     } else {
         throw protocol_error("REGISTERED - no pending request ID");
+    }
+}
+
+inline void wamp_session::process_unregistered(wamp_message&& message)
+{
+    // [UNREGISTERED, UNREGISTER.Request|id]
+    if (message.size() != 2) {
+        throw protocol_error("UNREGISTERED - length must be 2");
+    }
+
+    if (!message.is_field_type(1, msgpack::type::POSITIVE_INTEGER)) {
+        throw protocol_error("UNREGISTERED - UNREGISTERED.Request must be an integer");
+    }
+
+    uint64_t request_id = message.field<uint64_t>(1);
+    auto unregister_request_itr = m_unregister_requests.find(request_id);
+    if (unregister_request_itr != m_unregister_requests.end()) {
+        unregister_request_itr->second->set_response();
+        m_unregister_requests.erase(request_id);
+    } else {
+        throw protocol_error("UNREGISTERED - no pending request ID");
     }
 }
 

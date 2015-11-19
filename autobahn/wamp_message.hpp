@@ -22,6 +22,7 @@
 #include <cstddef>
 #include <msgpack.hpp>
 #include <vector>
+#include "wamp_message_type.hpp"
 
 namespace autobahn {
 
@@ -60,7 +61,7 @@ public:
      * @param num_fields The number of fields in the message.
      * @param zone The zone used to allocate fields in the message.
      */
-    wamp_message(std::size_t num_fields, msgpack::zone&& zone);
+    wamp_message(std::size_t num_fields, msgpack::unique_ptr<msgpack::zone>& zone);
 
     /*!
      * Constructs a wamp message with the given fields.
@@ -68,7 +69,7 @@ public:
      * @param fields The fields in the message.
      * @param zone The zone used to allocate fields in the message.
      */
-    wamp_message(message_fields&& fields, msgpack::zone&& zone);
+    wamp_message(message_fields&& fields, msgpack::unique_ptr<msgpack::zone>& zone);
 
     wamp_message(const wamp_message& other) = delete;
     wamp_message(wamp_message&& other);
@@ -144,7 +145,16 @@ public:
      *
      * @return The message zone.
      */
-    msgpack::zone&& zone();
+    msgpack::unique_ptr<msgpack::zone> &zone();
+
+    /*!
+     * Gets the message type based on the enumerated wamp_message types
+     *
+     * @return the type of message based on the 1st field
+     */
+    message_type type(){
+        return static_cast<message_type>(field<int>(0));
+    }
 
 private:
     /*!
@@ -152,7 +162,7 @@ private:
      * the fields. If the fields are pilfered then the zone must also
      * be pilferred and stored along with the fields.
      */
-    msgpack::zone m_zone;
+    msgpack::unique_ptr<msgpack::zone> m_zone;
 
     /*!
      * The fields comprising of the message. It is up to the user of this

@@ -35,7 +35,41 @@ class wamp_invocation_impl
 {
 public:
     wamp_invocation_impl();
+    wamp_invocation_impl(msgpack::unique_ptr<msgpack::zone> &zone);
     wamp_invocation_impl(wamp_invocation_impl&&) = delete; // copy wamp_invocation instead
+
+    /*!
+     * The detail passed by the router with the given @p key, converted to type T.
+     *
+     * Overloads are provided for `std::string` and `char*` as @p key type.
+     *
+     * This function uses key string comparisons to find the matching value, O(n) with n being
+     * the number of map elements. Memory allocation for keys is avoided though. For larger maps,
+     * you might want to prioritize look-up performance by using `std::map`, `std::unordered_map`
+     * or custom types with custom deserialization. To do this, use details<Map>(), then access the items from there.
+     *
+     * Example:
+     * `std::string invoked_procedure = invocation->detail<std::string>("procedure");`
+     *
+     * @throw std::out_of_range
+     * @throw std::bad_cast
+     */
+    template <typename T>
+    T detail(const std::string& key) const;
+
+    template <typename T>
+    T detail(const char *key) const;
+
+    /*!
+     * The details passed to the invocation from the router, converted to a map type.
+     *
+     * Example:
+     * `auto details = invocation->details<std::unordered_map<std::string, msgpack::object>>();`
+     *
+     * @throw std::bad_cast
+     */
+    template<typename Map>
+    Map details() const;
 
     /*!
      * The number of positional arguments passed to the invocation.
@@ -216,16 +250,18 @@ public:
     using send_result_fn = std::function<void(const std::shared_ptr<wamp_message>&)>;
     void set_send_result_fn(send_result_fn&&);
     void set_request_id(std::uint64_t);
-    void set_zone(msgpack::zone&&);
+    void set_details(const msgpack::object& details);
     void set_arguments(const msgpack::object& arguments);
     void set_kw_arguments(const msgpack::object& kw_arguments);
+    void set_zone(msgpack::unique_ptr<msgpack::zone> &zone);
     bool sendable() const;
 
 private:
     void throw_if_not_sendable();
 
 private:
-    msgpack::zone m_zone;
+    msgpack::unique_ptr<msgpack::zone> m_zone;
+    msgpack::object m_details;
     msgpack::object m_arguments;
     msgpack::object m_kw_arguments;
     send_result_fn m_send_result_fn;

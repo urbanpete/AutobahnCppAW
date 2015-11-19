@@ -16,25 +16,21 @@
 //
 ///////////////////////////////////////////////////////////////////////////////
 
-#ifndef AUTOBAHN_WAMP_UDS_TRANSPORT_HPP
-#define AUTOBAHN_WAMP_UDS_TRANSPORT_HPP
-
-#if defined(BOOST_ASIO_HAS_LOCAL_SOCKETS)
-
-#include "wamp_rawsocket_transport.hpp"
-
-#include <boost/asio/local/stream_protocol.hpp>
-
 namespace autobahn {
 
-/*!
- * A transport that provides rawsocket support over unix domain sockets (UDS).
- */
-using wamp_uds_transport =
-        wamp_rawsocket_transport<
-            boost::asio::local::stream_protocol::socket>;
+inline wamp_unregister_request::wamp_unregister_request()
+    : m_response()
+{
+}
+
+inline boost::promise<void>& wamp_unregister_request::response()
+{
+    return m_response;
+}
+
+inline void wamp_unregister_request::set_response()
+{
+    m_response.set_value();
+}
 
 } // namespace autobahn
-
-#endif //defined(BOOST_ASIO_HAS_LOCAL_SOCKETS)
-#endif // AUTOBAHN_WAMP_UDS_TRANSPORT_HPP

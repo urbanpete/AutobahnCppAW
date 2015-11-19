@@ -268,7 +268,12 @@ void wamp_rawsocket_transport<Socket>::receive_message_header(
         const boost::system::error_code& error_code,
         std::size_t /* bytes transferred */)
 {
-    if (!error_code) {
+    if (error_code) {
+        if (error_code != boost::asio::error::operation_aborted) {
+            throw boost::system::system_error(error_code);
+        }
+        return;
+    }else{
         m_message_length = ntohl(m_message_length);
 
         if (m_debug_enabled) {
@@ -284,7 +289,6 @@ void wamp_rawsocket_transport<Socket>::receive_message_header(
                 this->shared_from_this(),
                 boost::asio::placeholders::error,
                 boost::asio::placeholders::bytes_transferred));
-        return;
     }
 }
 
@@ -295,7 +299,7 @@ void wamp_rawsocket_transport<Socket>::receive_message_body(
 {
     if (error_code) {
         if (m_debug_enabled && error_code != boost::asio::error::operation_aborted) {
-            std::cerr << "Receive error: " << error_code << std::endl;
+            throw boost::system::system_error(error_code);
         }
         return;
     }
@@ -316,7 +320,7 @@ void wamp_rawsocket_transport<Socket>::receive_message_body(
             wamp_message::message_fields fields;
             result.get().convert(fields);
 
-            wamp_message message(std::move(fields), std::move(*(result.zone())));
+            wamp_message message(std::move(fields), result.zone());
             m_handler->on_message(std::move(message));
         }
     }

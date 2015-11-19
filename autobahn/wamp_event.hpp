@@ -27,10 +27,14 @@
 
 namespace autobahn {
 
-class wamp_event
+using subscribe_options = wamp_kw_arguments;
+
+class wamp_event_impl
 {
 public:
-    wamp_event(msgpack::zone&& zone);
+    wamp_event_impl(msgpack::unique_ptr<msgpack::zone>& zone);
+    wamp_event_impl();
+    wamp_event_impl(wamp_event_impl&&) = delete; // copy wamp_event instead
 
     /*!
      * The number of positional arguments published by the event.
@@ -168,19 +172,92 @@ public:
      */
     template <typename Map>
     void get_kw_arguments(Map& kw_args) const;
+    /*!
+     * The detail published by the router with the given @p key, converted to type T,
+     *
+     * Overloads are provided for `std::string` and `char*` as @p key type.
+     *
+     * This function uses key string comparisons to find the matching value, O(n) with n being
+     * the number of map elements. Memory allocation for keys is avoided though. For larger maps,
+     * you might want to prioritize look-up performance by using `std::map`, `std::unordered_map`
+     * or custom types with custom deserialization. To do this, use kw_arguments<Map>() or
+     * get_kw_arguments<Map>(map), then access the items from there.
+     *
+     * Example:
+     * `std::string id = event.kw_argument<std::string>("id");`
+     *
+     * @throw std::out_of_range
+     * @throw std::bad_cast
+     */
+    template <typename T>
+    T detail(const std::string& key) const;
 
+    template <typename T>
+    T detail(const char* key) const;
+
+    /*!
+     * The detail published by the router with the given @p key, converted to type T,
+     * or the given @p fallback if no such key was passed.
+     *
+     * Overloads are provided for `std::string` and `char*` as @p key type.
+     *
+     * This function uses key string comparisons to find the matching value, O(n) with n being
+     * the number of map elements. Memory allocation for keys is avoided though. For larger maps,
+     * you might want to prioritize look-up performance by using `std::map`, `std::unordered_map`
+     * or custom types with custom deserialization. To do this, use kw_arguments<Map>() or
+     * get_kw_arguments<Map>(map), then access the items from there.
+     *
+     * Example:
+     * `std::string id = event.kw_argument_or("id", std::string());`
+     *
+     * @throw std::bad_cast
+     */
+    template <typename T>
+    T detail_or(const std::string& key, const T& fallback) const;
+
+    template <typename T>
+    T detail_or(const char* key, const T& fallback) const;
+
+    /*!
+     * The details published by the router, converted to a map type.
+     *
+     * Example:
+     * `auto kw_args = event.kw_arguments<std::unordered_map<std::string, msgpack::object>>();`
+     *
+     * @throw std::bad_cast
+     */
+    template <typename Map>
+    Map details() const;
+
+    /*!
+     * Convert and assign the keyword arguments published by the event to the given @p kw_args map.
+     *
+     * Example:
+     * ```
+     * std::unordered_map<std::string, msgpack::object> kw_args;
+     * event.get_kw_arguments(kw_args);
+     * ```
+     *
+     * @throw std::bad_cast
+     */
+    template <typename Map>
+    void get_details(Map& kw_args) const;
     //
     // functions only called internally by wamp_session
 
     void set_arguments(const msgpack::object& arguments);
     void set_kw_arguments(const msgpack::object& kw_arguments);
+    void set_details(const msgpack::object& kw_arguments);
+    void set_zone(msgpack::unique_ptr<msgpack::zone>& zone);
 
 private:
-    msgpack::zone m_zone;
     msgpack::object m_arguments;
     msgpack::object m_kw_arguments;
+    msgpack::object m_details;
+    msgpack::unique_ptr<msgpack::zone> m_zone;
 };
 
+using wamp_event = std::shared_ptr<wamp_event_impl>;
 } // namespace autobahn
 
 #include "wamp_event.ipp"

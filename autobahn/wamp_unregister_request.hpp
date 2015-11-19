@@ -16,25 +16,40 @@
 //
 ///////////////////////////////////////////////////////////////////////////////
 
-#ifndef AUTOBAHN_WAMP_UDS_TRANSPORT_HPP
-#define AUTOBAHN_WAMP_UDS_TRANSPORT_HPP
+#ifndef AUTOBAHN_WAMP_UNREGISTER_REQUEST_HPP
+#define AUTOBAHN_WAMP_UNREGISTER_REQUEST_HPP
 
-#if defined(BOOST_ASIO_HAS_LOCAL_SOCKETS)
+// http://stackoverflow.com/questions/22597948/using-boostfuture-with-then-continuations/
+#ifndef BOOST_THREAD_PROVIDES_FUTURE
+#define BOOST_THREAD_PROVIDES_FUTURE
+#endif
 
-#include "wamp_rawsocket_transport.hpp"
+#ifndef BOOST_THREAD_PROVIDES_FUTURE_CONTINUATION
+#define BOOST_THREAD_PROVIDES_FUTURE_CONTINUATION
+#endif
 
-#include <boost/asio/local/stream_protocol.hpp>
+#ifndef BOOST_THREAD_PROVIDES_FUTURE_WHEN_ALL_WHEN_ANY
+#define BOOST_THREAD_PROVIDES_FUTURE_WHEN_ALL_WHEN_ANY
+#endif
+#include <boost/thread/future.hpp>
 
 namespace autobahn {
 
-/*!
- * A transport that provides rawsocket support over unix domain sockets (UDS).
- */
-using wamp_uds_transport =
-        wamp_rawsocket_transport<
-            boost::asio::local::stream_protocol::socket>;
+/// An outstanding wamp call.
+class wamp_unregister_request
+{
+public:
+    wamp_unregister_request();
+
+    boost::promise<void>& response();
+    void set_response();
+
+private:
+    boost::promise<void> m_response;
+};
 
 } // namespace autobahn
 
-#endif //defined(BOOST_ASIO_HAS_LOCAL_SOCKETS)
-#endif // AUTOBAHN_WAMP_UDS_TRANSPORT_HPP
+#include "wamp_unregister_request.ipp"
+
+#endif // AUTOBAHN_WAMP_UNREGISTER_REQUEST_HPP

@@ -25,13 +25,66 @@
 
 namespace autobahn {
 
-inline wamp_invocation_impl::wamp_invocation_impl()
-    : m_zone()
+inline wamp_invocation_impl::wamp_invocation_impl(msgpack::unique_ptr<msgpack::zone> &zone)
+    : m_zone(std::move(zone))
+    , m_details(EMPTY_DETAILS)
     , m_arguments(EMPTY_ARGUMENTS)
     , m_kw_arguments(EMPTY_KW_ARGUMENTS)
     , m_send_result_fn()
     , m_request_id(0)
 {
+}
+
+inline wamp_invocation_impl::wamp_invocation_impl()
+    : m_zone()
+    , m_details(EMPTY_DETAILS)
+    , m_arguments(EMPTY_ARGUMENTS)
+    , m_kw_arguments(EMPTY_KW_ARGUMENTS)
+    , m_send_result_fn()
+    , m_request_id(0)
+{
+}
+
+
+template <typename T>
+T wamp_invocation_impl::detail(const std::string& key) const
+{
+    if (m_details.type != msgpack::type::MAP) {
+        throw msgpack::type_error();
+    }
+    for (std::size_t i = 0; i < m_details.via.map.size; ++i) {
+        const msgpack::object_kv& kv = m_details.via.map.ptr[i];
+        if (kv.key.type == msgpack::type::STR && key.size() == kv.key.via.str.size
+            && key.compare(0, key.size(), kv.key.via.str.ptr, kv.key.via.str.size) == 0)
+        {
+            return kv.val.as<T>();
+        }
+    }
+    throw std::out_of_range(key + " detail doesn't exist");
+}
+
+template <typename T>
+T wamp_invocation_impl::detail(const char *key) const
+{
+    if (m_details.type != msgpack::type::MAP) {
+        throw msgpack::type_error();
+    }
+    std::size_t key_size = strlen(key);
+    for (std::size_t i = 0; i < m_details.via.map.size; ++i) {
+        const msgpack::object_kv& kv = m_details.via.map.ptr[i];
+        if (kv.key.type == msgpack::type::STR && key_size == kv.key.via.str.size
+            && memcmp(key, kv.key.via.str.ptr, key_size) == 0)
+        {
+            return kv.val.as<T>();
+        }
+    }
+    throw std::out_of_range(std::string(key) + " detail doesn't exist");
+}
+
+template<typename Map>
+Map wamp_invocation_impl::details() const
+{
+    return m_details.as<Map>();
 }
 
 inline std::size_t wamp_invocation_impl::number_of_arguments() const
@@ -267,9 +320,9 @@ inline void wamp_invocation_impl::set_request_id(std::uint64_t request_id)
     m_request_id = request_id;
 }
 
-inline void wamp_invocation_impl::set_zone(msgpack::zone&& zone)
+inline void wamp_invocation_impl::set_details(const msgpack::object& details)
 {
-    m_zone = std::move(zone);
+    m_details = details;
 }
 
 inline void wamp_invocation_impl::set_arguments(const msgpack::object& arguments)
@@ -280,6 +333,11 @@ inline void wamp_invocation_impl::set_arguments(const msgpack::object& arguments
 inline void wamp_invocation_impl::set_kw_arguments(const msgpack::object& kw_arguments)
 {
     m_kw_arguments = kw_arguments;
+}
+
+inline void wamp_invocation_impl::set_zone(msgpack::unique_ptr<msgpack::zone>& zone)
+{
+    m_zone = std::move(zone);
 }
 
 inline bool wamp_invocation_impl::sendable() const

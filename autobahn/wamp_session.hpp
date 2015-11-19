@@ -26,9 +26,18 @@
 #include "wamp_transport_handler.hpp"
 
 // http://stackoverflow.com/questions/22597948/using-boostfuture-with-then-continuations/
+#ifndef BOOST_THREAD_PROVIDES_FUTURE
 #define BOOST_THREAD_PROVIDES_FUTURE
+#endif
+
+#ifndef BOOST_THREAD_PROVIDES_FUTURE_CONTINUATION
 #define BOOST_THREAD_PROVIDES_FUTURE_CONTINUATION
+#endif
+
+#ifndef BOOST_THREAD_PROVIDES_FUTURE_WHEN_ALL_WHEN_ANY
 #define BOOST_THREAD_PROVIDES_FUTURE_WHEN_ALL_WHEN_ANY
+#endif
+
 #include <boost/asio.hpp>
 #include <boost/thread/future.hpp>
 #include <cstdint>
@@ -44,7 +53,9 @@
 #include <vector>
 
 #if defined(_WIN32) || defined(WIN32)
+#ifndef WIN32_LEAN_AND_MEAN
 #define WIN32_LEAN_AND_MEAN
+#endif
 #endif
 
 #ifdef ERROR
@@ -57,6 +68,7 @@ class wamp_call;
 class wamp_message;
 class wamp_register_request;
 class wamp_registration;
+class wamp_unregister_request;
 class wamp_subscribe_request;
 class wamp_subscription;
 class wamp_transport;
@@ -153,7 +165,8 @@ public:
      */
     boost::future<wamp_subscription> subscribe(
             const std::string& topic,
-            const wamp_event_handler& handler);
+            const wamp_event_handler& handler,
+            const subscribe_options& options=subscribe_options());
 
     /*!
      * Unubscribe a handler to previosuly subscribed topic.
@@ -215,7 +228,26 @@ public:
             const wamp_procedure& procedure,
             const provide_options& options = provide_options());
 
+    /*!
+     * Unregister a provider handler to previosuly provided registration.
+     *
+     * \param registration The registration to stop providing.
+     * \return A future that synchronizes to the unregister response.
+     */
+    boost::future<void> unprovide(const wamp_registration& registration);
+
+    /*!
+     * \brief is_connected
+     * \return true if there is a valid session
+     */
+    bool is_connected()
+    {
+        return m_session_id!=0U;
+    }
+
 private:
+    /// Handle error codes from the istream (filters out operation_aborted error), throws boost::system::system_error for all others
+    void handle_rx_error(const boost::system::error_code& error);
     virtual void on_attach(const std::shared_ptr<wamp_transport>& transport) override;
     virtual void on_detach(bool was_clean, const std::string& reason) override;
     virtual void on_message(wamp_message&& message) override;
@@ -227,8 +259,12 @@ private:
     void process_unsubscribed(wamp_message&& message);
     void process_event(wamp_message&& message);
     void process_registered(wamp_message&& message);
+    void process_unregistered(wamp_message&& message);
     void process_invocation(wamp_message&& message);
     void process_goodbye(wamp_message&& message);
+
+    /// Process a WAMP UNREGISTERED message.
+    void process_unregistered(wamp_message& message);
 
     void send(wamp_message&& message, bool session_established=true);
 
@@ -286,6 +322,9 @@ private:
 
     /// Map of outstanding WAMP register requests (request ID -> register request).
     std::map<uint64_t, std::shared_ptr<wamp_register_request>> m_register_requests;
+
+    /// Map of outstanding WAMP unregister requests (request ID -> unregister request).
+    std::map<uint64_t, std::shared_ptr<wamp_unregister_request>> m_unregister_requests;
 
     /// Map of registered procedures (registration ID -> procedure)
     std::map<uint64_t, wamp_procedure> m_procedures;
