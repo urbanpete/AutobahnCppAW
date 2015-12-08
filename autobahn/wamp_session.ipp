@@ -563,17 +563,27 @@ inline void wamp_session::on_detach(bool was_clean, const std::string& reason)
     if (!m_transport) {
         throw protocol_error("Transport already detached from session");
     }
-
-    // FIXME: Figure out what to do if we are detaching a transport
-    //        from a session that is still running. Ideally we would
-    //        not detach the transport until m_session_stop is satisfied.
-    //        Perhaps we could use the same promise/future discussed above.
-    //        One side effect here will be if the transport is re-used for
-    //        another session as it may still receive messages for the old
-    //        session.
-    assert(!m_running);
-
-    m_transport.reset();
+    auto weak_this = std::weak_ptr<wamp_session>(this->shared_from_this());
+    m_io_service.dispatch([weak_this] {
+        auto shared_this = weak_this.lock();
+        if (!shared_this) {
+            return; // FIXME: or throw exception?
+        }
+        shared_this->m_transport.reset();
+        shared_this->m_session_id=0;
+        shared_this->m_session_start = boost::promise<void>();
+        shared_this->m_session_join=boost::promise<uint64_t>();
+        shared_this->m_session_leave=boost::promise<std::string>();
+        shared_this->m_running=false;
+        shared_this->m_session_stop = boost::promise<void>();
+        shared_this->m_calls.clear();
+        shared_this->m_subscribe_requests.clear();
+        shared_this->m_unsubscribe_requests.clear();
+        shared_this->m_subscription_handlers.clear();
+        shared_this->m_register_requests.clear();
+        shared_this->m_unregister_requests.clear();
+        shared_this->m_procedures.clear();
+    });
 }
 
 inline void wamp_session::on_message(wamp_message&& message)
