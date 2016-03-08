@@ -7,6 +7,8 @@
  * **Publisher**
  * **Subscriber**
 
+**Autobahn**|Cpp is open-source, licensed under the [Boost Software License](LICENSE).
+
 The API and implementation make use of modern C++ 11 and new asynchronous idioms using (upcoming) features of the standard C++ library, in particular **Futures**, [**Continuations**](http://www.open-std.org/jtc1/sc22/wg21/docs/papers/2013/n3634.pdf) and **Lambdas**.
 
 > [Continuations](http://en.wikipedia.org/wiki/Continuation) are *one* way of managing control flow in an asynchronous program. Other styles include: asynchronous [Callbacks](http://en.wikipedia.org/wiki/Callback_%28computer_programming%29), [Coroutines](http://en.wikipedia.org/wiki/Coroutine) (`yield` or `await`), Actors ([Erlang/OTP](http://www.erlang.org/), [Scala](http://www.scala-lang.org/)/[Akka](http://akka.io/) or [Rust](http://www.scala-lang.org/)) and [Transactional memory](http://en.wikipedia.org/wiki/Transactional_Synchronization_Extensions).
@@ -83,14 +85,20 @@ Here is JavaScript running in Chrome call into C++ running on command line. Both
 
 ![](doc/_static/cpp_from_js.png)
 
-* [Example C++ code](https://github.com/davidchappelle/AutobahnCpp/blob/master/examples/register2.cpp)
-* [Example JavaScript code](https://github.com/tavendo/AutobahnCpp/blob/master/examples/index.html)
+* [Example C++ code](https://github.com/crossbario/autobahn-cpp/blob/master/examples/register2.cpp)
+* [Example JavaScript code](https://github.com/crossbario/autobahn-cpp/blob/master/examples/index.html)
+
+
+## Examples
+
+The Autobahn|Cpp repository contains a number of [examples](examples) that demonstrate all 4 basic patterns of using WAMP. There are also examples for WAMP-CRA and Unix domain sockets.
+
 
 ## Building
 
 > *Notes*
 >
-> * The library code is written in standard C++ 11. Target toolchains currently include **clang** and **gcc**. Support for MSVC is tracked on this [issue](https://github.com/tavendo/AutobahnCpp/issues/2).
+> * The library code is written in standard C++ 11. Target toolchains currently include **clang** and **gcc**. Support for MSVC is tracked on this [issue](https://github.com/crossbario/autobahn-cpp/issues/2).
 > * While C++ 11 includes `std::future` in the standard library, this lacks continuations. `boost::future.then` allows attaching continuations to futures as outlined in the proposal [here](http://www.open-std.org/jtc1/sc22/wg21/docs/papers/2013/n3634.pdf). This feature will come to standard C++, but probably not before 2017 (see [C++ Standardisation Roadmap](http://isocpp.org/std/status))
 > * Support for `when_all` and `when_any` as described in above proposal depends on Boost 1.56 or higher.
 > * The library and example programs were tested and developed with **clang 3.4**, **libc++** and **Boost trunk/1.56** on an Ubuntu 13.10 x86-64 bit system. It also works with **gcc 4.8**, **libstdc++** and **Boost trunk/1.56**. Your mileage with other versions of the former may vary, but we accept PRs;)
@@ -101,7 +109,7 @@ Here is JavaScript running in Chrome call into C++ running on command line. Both
 Install some libs and build tools (these are for Ubuntu):
 
 ```console
-sudo apt-get install libbz2-dev libssl-dev cmake
+sudo apt-get install -y libbz2-dev libssl-dev cmake
 ```
 
 ### Clang
@@ -109,20 +117,37 @@ sudo apt-get install libbz2-dev libssl-dev cmake
 If you want to work with Clang (rather than GCC), install [clang](http://clang.llvm.org/) and [libc++](http://libcxx.llvm.org/) (these are for Ubuntu):
 
 ```console
-sudo apt-get install clang libc++1 libc++-dev
-sudo update-alternatives --config c++
-# select clang++ in command-line interface
+sudo apt-get install -y clang libc++1 libc++-dev
+```
+
+Then make Clang available:
+
+```console
+oberstet@corei7ub1310:~$ sudo update-alternatives --config c++
+[sudo] password for oberstet: 
+Es gibt 3 Auswahlmöglichkeiten für die Alternative c++ (welche /usr/bin/c++ bereitstellen).
+
+  Auswahl      Pfad                     Priorität Status
+------------------------------------------------------------
+* 0            /usr/bin/g++              20        Auto-Modus
+  1            /usr/bin/clang++          10        manueller Modus
+  2            /usr/bin/clang++-libc++   5         manueller Modus
+  3            /usr/bin/g++              20        manueller Modus
+
+Drücken Sie die Eingabetaste, um die aktuelle Wahl[*] beizubehalten,
+oder geben Sie die Auswahlnummer ein: 1
+update-alternatives: /usr/bin/clang++ wird verwendet, um /usr/bin/c++ (c++) im manueller Modus bereitzustellen
 ```
 
 ### Boost
 
-Most of the time, your distro's Boost libraries will be outdated (unless you're using Arch or Homebrew). Don't waste time with those: to build the latest Boost 1.58 (current release as of 2015/06) from sources
+Most of the time, your distro's Boost libraries will be outdated (unless you're using Arch or Homebrew). Don't waste time with those: to build the latest Boost 1.60 (current release as of 2016/01) from sources
 
 ```console
 cd ~
-wget http://downloads.sourceforge.net/project/boost/boost/1.58.0/boost_1_58_0.tar.bz2
-tar xvjf boost_1_58_0.tar.bz2
-cd boost_1_58_0
+wget http://downloads.sourceforge.net/project/boost/boost/1.60.0/boost_1_60_0.tar.bz2
+tar xvjf boost_1_60_0.tar.bz2
+cd boost_1_60_0
 ./bootstrap.sh --with-toolset=clang
 ./b2 toolset=clang cxxflags="-stdlib=libc++" linkflags="-stdlib=libc++" -j 4
 ```
@@ -137,23 +162,38 @@ To build using GCC instead of Clang:
 ./b2 toolset=gcc -j 4
 ```
 
+Then add the following to your `~/.profile`:
+
+```shell
+export BOOST_ROOT=${HOME}/boost_1_60_0
+export LD_LIBRARY_PATH=${BOOST_ROOT}/stage/lib:${LD_LIBRARY_PATH}
+```
+
 ### MsgPack-C
 
 Get [MsgPack-C](https://github.com/msgpack/msgpack-c) and install:
 
 ```console
-cd $HOME
+cd ~
 git clone https://github.com/msgpack/msgpack-c.git
 cd msgpack-c
-git checkout cpp-1.1.0
-mkdir -p ../build/msgpack-c
-cd ../build/msgpack-c
-cmake ${HOME}/msgpack-c
-make
+git checkout cpp-1.4.0
+export CC=/usr/bin/clang
+export CXX=/usr/bin/clang++
+export CXXFLAGS="$CXXFLAGS -std=c++11"
+./bootstrap
+./configure --prefix=$HOME/msgpack_clang
 make install
 ```
 
 > On FreeBSD, you need to `pkg install autotools` and invoke `gmake` instead of `make`.
+
+Then add the following to your `~/.profile`:
+
+```shell
+export MSGPACK_ROOT=${HOME}/msgpack_clang
+export LD_LIBRARY_PATH=${MSGPACK_ROOT}/lib:${LD_LIBRARY_PATH}
+```
 
 ### **Autobahn**|Cpp
 
@@ -161,78 +201,17 @@ To get **Autobahn**|Cpp library and examples, clone the repo
 
 ```console
 cd $HOME
-git clone git@github.com:davidchappelle/AutobahnCpp.git autobahn
+git clone https://github.com/crossbario/autobahn-cpp.git
 cd autobahn
 ```
 
 The library is "header-only", means there isn't anything to compile or build. Just include the relevant headers.
 
 
-## Examples
-
-The Autobahn|Cpp repository contains a number of [examples](https://github.com/tavendo/AutobahnCpp/tree/master/examples) that demonstrate all 4 basic patterns of using WAMP:
-
-* [Call 1](https://github.com/davidchappelle/AutobahnCpp/blob/master/examples/call1.cpp)
-* [Call 2](https://github.com/davidchappelle/AutobahnCpp/blob/master/examples/call2.cpp)
-* [Call 3](https://github.com/davidchappelle/AutobahnCpp/blob/master/examples/call3.cpp)
-* [Register 1](https://github.com/davidchappelle/AutobahnCpp/blob/master/examples/register1.cpp)
-* [Register 2](https://github.com/davidchappelle/AutobahnCpp/blob/master/examples/register2.cpp)
-* [Publish 1](https://github.com/davidchappelle/AutobahnCpp/blob/master/examples/publish1.cpp)
-* [Publish 2](https://github.com/davidchappelle/AutobahnCpp/blob/master/examples/publish2.cpp)
-* [Publish 3](https://github.com/davidchappelle/AutobahnCpp/blob/master/examples/publish3.cpp)
-* [Subscribe 1](https://github.com/davidchappelle/AutobahnCpp/blob/master/examples/subscribe1.cpp)
-
-
-### Building the Examples
-
-For building the examples, add the following to your `~/.profile`:
-
-```console
-export BOOST_ROOT=${HOME}/boost
-```
-
-Now build all examples:
-
-```console
-mkdir -p ${HOME}/build/autobahn
-cd ${HOME}/build/autobahn
-cmake ${HOME}/autobahn
-make -j4
-```
-
-The examples will get built in `build/autobahn/examples`.
-
-
-### Running the Examples
-
-The examples include a [Autobahn|Python](http://autobahn.ws/python) based WAMP router and example backend.
-
-To run this, you need [Python](http://python.org) and [pip](http://www.pip-installer.org/en/latest/installing.html) already installed.
-
-Then, to install **Autobahn|Python**
-
-```console
-pip install autobahn[twisted]
-```
-
-Start the [Crossbar hello:cpp example](https://github.com/crossbario/crossbarexamples/tree/master/hello/cpp) router in a first terminal
-
-```console
-cd $CROSSBAR_EXAMPLES/hello/cpp
-crossbar start
-```
-
-Then start one of the built C++ examples in a second terminal
-
-```console
-cd ${HOME}/build/autobahn
-./examples/call1
-```
-
-
 ## Documentation
 
 [Click here](http://autobahn.ws/cpp/reference/) for the Autobahn|Cpp reference documentation.
+
 
 ## Get in touch
 

@@ -36,12 +36,17 @@ set(PUBLIC_HEADERS
     ${CMAKE_CURRENT_SOURCE_DIR}/autobahn/autobahn.hpp
     ${CMAKE_CURRENT_SOURCE_DIR}/autobahn/exceptions.hpp
     ${CMAKE_CURRENT_SOURCE_DIR}/autobahn/wamp_arguments.hpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/autobahn/wamp_auth_utils.hpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/autobahn/wamp_authenticate.hpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/autobahn/wamp_authenticate.ipp
     ${CMAKE_CURRENT_SOURCE_DIR}/autobahn/wamp_call.hpp
     ${CMAKE_CURRENT_SOURCE_DIR}/autobahn/wamp_call.ipp
     ${CMAKE_CURRENT_SOURCE_DIR}/autobahn/wamp_call_options.hpp
     ${CMAKE_CURRENT_SOURCE_DIR}/autobahn/wamp_call_options.ipp
     ${CMAKE_CURRENT_SOURCE_DIR}/autobahn/wamp_call_result.hpp
     ${CMAKE_CURRENT_SOURCE_DIR}/autobahn/wamp_call_result.ipp
+    ${CMAKE_CURRENT_SOURCE_DIR}/autobahn/wamp_challenge.hpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/autobahn/wamp_challenge.ipp
     ${CMAKE_CURRENT_SOURCE_DIR}/autobahn/wamp_event.hpp
     ${CMAKE_CURRENT_SOURCE_DIR}/autobahn/wamp_event.ipp
     ${CMAKE_CURRENT_SOURCE_DIR}/autobahn/wamp_event_handler.hpp
@@ -50,6 +55,7 @@ set(PUBLIC_HEADERS
     ${CMAKE_CURRENT_SOURCE_DIR}/autobahn/wamp_message.hpp
     ${CMAKE_CURRENT_SOURCE_DIR}/autobahn/wamp_message.ipp
     ${CMAKE_CURRENT_SOURCE_DIR}/autobahn/wamp_message_type.hpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/autobahn/wamp_message_type.ipp
     ${CMAKE_CURRENT_SOURCE_DIR}/autobahn/wamp_procedure.hpp
     ${CMAKE_CURRENT_SOURCE_DIR}/autobahn/wamp_publication.hpp
     ${CMAKE_CURRENT_SOURCE_DIR}/autobahn/wamp_publication.ipp
@@ -59,19 +65,28 @@ set(PUBLIC_HEADERS
     ${CMAKE_CURRENT_SOURCE_DIR}/autobahn/wamp_register_request.ipp
     ${CMAKE_CURRENT_SOURCE_DIR}/autobahn/wamp_registration.hpp
     ${CMAKE_CURRENT_SOURCE_DIR}/autobahn/wamp_registration.ipp
+    ${CMAKE_CURRENT_SOURCE_DIR}/autobahn/wamp_transport.hpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/autobahn/wamp_transport_handler.hpp
     ${CMAKE_CURRENT_SOURCE_DIR}/autobahn/wamp_session.hpp
     ${CMAKE_CURRENT_SOURCE_DIR}/autobahn/wamp_session.ipp
+    ${CMAKE_CURRENT_SOURCE_DIR}/autobahn/wamp_subscribe_options.hpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/autobahn/wamp_subscribe_options.ipp
     ${CMAKE_CURRENT_SOURCE_DIR}/autobahn/wamp_subscribe_request.hpp
     ${CMAKE_CURRENT_SOURCE_DIR}/autobahn/wamp_subscribe_request.ipp
     ${CMAKE_CURRENT_SOURCE_DIR}/autobahn/wamp_subscription.hpp
     ${CMAKE_CURRENT_SOURCE_DIR}/autobahn/wamp_subscription.ipp
     ${CMAKE_CURRENT_SOURCE_DIR}/autobahn/wamp_tcp_transport.hpp
     ${CMAKE_CURRENT_SOURCE_DIR}/autobahn/wamp_tcp_transport.ipp
-    ${CMAKE_CURRENT_SOURCE_DIR}/autobahn/wamp_transport.hpp
     ${CMAKE_CURRENT_SOURCE_DIR}/autobahn/wamp_transport_handler.hpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/autobahn/wamp_transport.hpp
     ${CMAKE_CURRENT_SOURCE_DIR}/autobahn/wamp_uds_transport.hpp
     ${CMAKE_CURRENT_SOURCE_DIR}/autobahn/wamp_unsubscribe_request.hpp
-    ${CMAKE_CURRENT_SOURCE_DIR}/autobahn/wamp_unsubscribe_request.ipp)
+    ${CMAKE_CURRENT_SOURCE_DIR}/autobahn/wamp_unsubscribe_request.ipp
+    ${CMAKE_CURRENT_SOURCE_DIR}/autobahn/wamp_websocket_transport.hpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/autobahn/wamp_websocket_transport.ipp
+    ${CMAKE_CURRENT_SOURCE_DIR}/autobahn/wamp_websocketpp_websocket_transport.hpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/autobahn/wamp_websocketpp_websocket_transport.ipp
+    )
 
 foreach(h ${PUBLIC_HEADERS})
     string(REPLACE "${CMAKE_CURRENT_SOURCE_DIR}/" "include/" include "${h}")
