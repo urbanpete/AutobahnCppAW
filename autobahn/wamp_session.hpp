@@ -138,6 +138,15 @@ public:
     boost::future<std::string> leave(
             const std::string& reason = std::string("wamp.error.close_realm"));
 
+	/*!
+	 * \brief is_connected
+	 * \return true if there is a valid session
+	 */
+	bool is_connected()
+	{
+	    return m_session_id != 0U;
+	}
+
     /*!
      * Publish an event with empty payload to a topic.
      *
