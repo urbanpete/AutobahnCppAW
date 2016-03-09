@@ -256,7 +256,8 @@ public:
     void set_send_result_fn(send_result_fn&&);
     void set_details(const msgpack::object& details);
     void set_request_id(std::uint64_t);
-    void set_zone(msgpack::zone&&);
+	std::uint64_t get_request_id();
+	void set_zone(msgpack::zone&&);
     void set_arguments(const msgpack::object& arguments);
     void set_kw_arguments(const msgpack::object& kw_arguments);
     bool sendable() const;
