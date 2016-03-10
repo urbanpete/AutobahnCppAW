@@ -525,7 +525,7 @@ inline boost::future<wamp_registration> wamp_session::provide(
     return register_request->response().get_future();
 }
 
-boost::future<void> wamp_session::unprovide(const wamp_registration& registration){
+inline boost::future<void> wamp_session::unprovide(const wamp_registration& registration){
     uint64_t request_id = ++m_request_id;
 
 	auto message = std::make_shared<wamp_message>(3);
@@ -554,7 +554,7 @@ boost::future<void> wamp_session::unprovide(const wamp_registration& registratio
 	return unregister_request->response().get_future();
 }
  
-boost::future<wamp_authenticate> wamp_session::on_challenge(const wamp_challenge& challenge)
+inline boost::future<wamp_authenticate> wamp_session::on_challenge(const wamp_challenge& challenge)
 {
     // a dummy implementation
     boost::promise<wamp_authenticate> dummy;
@@ -688,7 +688,7 @@ inline void wamp_session::on_message(wamp_message&& message)
     }
 }
 
-void wamp_session::process_challenge(wamp_message&& message)
+inline void wamp_session::process_challenge(wamp_message&& message)
 {
     // kind of authentication
     std::string whatAuth = message.field<std::string>(1);
