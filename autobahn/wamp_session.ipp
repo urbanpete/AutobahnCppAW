@@ -529,7 +529,7 @@ inline boost::future<void> wamp_session::unprovide(const wamp_registration& regi
     uint64_t request_id = ++m_request_id;
 
 	auto message = std::make_shared<wamp_message>(3);
-	message->set_field(0, static_cast<int>(message_type::REGISTER));
+	message->set_field(0, static_cast<int>(message_type::UNREGISTER));
 	message->set_field(1, request_id);
 	message->set_field(2, registration.id());
 
