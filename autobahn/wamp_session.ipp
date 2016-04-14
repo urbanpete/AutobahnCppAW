@@ -30,6 +30,7 @@
 
 #include "exceptions.hpp"
 #include "wamp_call.hpp"
+#include "wamp_error.hpp"
 #include "wamp_event.hpp"
 #include "wamp_invocation.hpp"
 #include "wamp_message.hpp"
@@ -553,7 +554,7 @@ inline boost::future<void> wamp_session::unprovide(const wamp_registration& regi
 
 	return unregister_request->response().get_future();
 }
- 
+
 inline boost::future<wamp_authenticate> wamp_session::on_challenge(const wamp_challenge& challenge)
 {
     // a dummy implementation
@@ -883,6 +884,10 @@ inline void wamp_session::process_error(wamp_message&& message)
         throw protocol_error("invalid ERROR message - ERROR.Type must one of CALL, REGISTER, UNREGISTER, SUBSCRIBE, UNSUBSCRIBE");
     }
 
+    msgpack::object args = EMPTY_ARGUMENTS;
+    msgpack::object details = EMPTY_DETAILS;
+    msgpack::object kw_args = EMPTY_KW_ARGUMENTS;
+
     // REQUEST.Request|id
     if (!message.is_field_type(2, msgpack::type::POSITIVE_INTEGER)) {
         throw protocol_error("invalid ERROR message structure - REQUEST.Request must be an integer");
@@ -894,17 +899,20 @@ inline void wamp_session::process_error(wamp_message&& message)
         throw protocol_error("invalid ERROR message structure - Details must be a dictionary");
     }
 
+    details = message.field(3);
+
     // Error|uri
     if (!message.is_field_type(4, msgpack::type::STR)) {
         throw protocol_error("invalid ERROR message - Error must be a string (URI)");
     }
-    auto error = std::move(message.field<std::string>(4));
+    auto error_uri = std::move(message.field<std::string>(4));
 
     // Arguments|list
     if (message.size() > 5) {
         if (!message.is_field_type(5, msgpack::type::ARRAY)) {
             throw protocol_error("invalid ERROR message structure - Arguments must be a list");
         }
+        args = message.field(5);
     }
 
     // ArgumentsKw|list
@@ -912,21 +920,7 @@ inline void wamp_session::process_error(wamp_message&& message)
         if (!message.is_field_type(6, msgpack::type::MAP)) {
             throw protocol_error("invalid ERROR message structure - ArgumentsKw must be a dictionary");
         }
-        try {
-            auto kw_args = message.field<std::unordered_map<std::string, std::string>>(6);
-            const auto itr = kw_args.find("what");
-            if (itr != kw_args.end()) {
-                error += ": ";
-                error += itr->second;
-            }
-        } catch (const std::exception& e) {
-            if (m_debug_enabled) {
-                std::cerr << "failed to parse error message keyword arguments" << std::endl;
-            }
-
-            error += ": unknown exception:";
-			error += e.what();
-        }
+        kw_args = message.field(6);
     }
 
     switch (request_type) {
@@ -939,8 +933,7 @@ inline void wamp_session::process_error(wamp_message&& message)
                 auto call_itr = m_calls.find(request_id);
 
                 if (call_itr != m_calls.end()) {
-                    // FIXME: Forward all error info.
-                    call_itr->second->result().set_exception(std::runtime_error(error));
+                    call_itr->second->result().set_exception(wamp_error(request_type, request_id, error_uri, details, args, kw_args, std::move(message.zone())));
                     m_calls.erase(call_itr);
                 } else {
                     throw protocol_error("bogus ERROR message for non-pending CALL request ID");

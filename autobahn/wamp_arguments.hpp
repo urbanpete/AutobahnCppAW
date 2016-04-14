@@ -42,11 +42,12 @@ namespace autobahn {
 using wamp_arguments = std::vector<msgpack::object>;
 using wamp_kw_arguments = std::unordered_map<std::string, msgpack::object>;
 
+static const msgpack::object EMPTY_DETAILS(std::unordered_map<std::string, msgpack::object>(), nullptr);
 static const msgpack::object EMPTY_ARGUMENTS(std::array<msgpack::object, 0>(), nullptr);
 static const msgpack::object EMPTY_KW_ARGUMENTS(wamp_kw_arguments(), nullptr);
 
 
-//msgpack map utilities.  
+//msgpack map utilities.
 //TODO: refactor event & invocation to used these
 template <typename T>
 inline T value_for_key(const msgpack::object& object, const std::string& key)
