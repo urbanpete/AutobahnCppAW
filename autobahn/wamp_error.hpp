@@ -23,31 +23,6 @@
 #include <stdexcept>
 
 namespace autobahn {
-class wamp_error_impl{
-public:
-    wamp_error_impl(message_type type,
-                    uint64_t Id,
-                    const std::string& uri,
-                    const msgpack::object& details,
-                    const msgpack::object& args,
-                    const msgpack::object& kwargs,
-                    msgpack::unique_ptr<msgpack::zone>& zone)
-        : m_type(type)
-        , m_id(Id)
-        , m_details(details)
-        , m_args(args)
-        , m_kw_args(kwargs)
-    {
-        m_zone = std::move(zone);
-    }
-    message_type m_type;
-    uint64_t m_id;
-    msgpack::object m_details;
-    msgpack::object m_args;
-    msgpack::object m_kw_args;
-    msgpack::unique_ptr<msgpack::zone> m_zone;
-};
-
 class wamp_error : public std::runtime_error {
   public:
     wamp_error(message_type type,
@@ -56,41 +31,62 @@ class wamp_error : public std::runtime_error {
                const msgpack::object& details,
                const msgpack::object& args,
                const msgpack::object& kwargs,
-               msgpack::unique_ptr<msgpack::zone>& zone)
+               msgpack::zone&& zone)
              : std::runtime_error(uri)
+             , m_type(type)
+             , m_id(id)
+             , m_details(details)
+             , m_args(args)
+             , m_kw_args(kwargs)
+             , m_zone(std::make_shared<msgpack::zone>(std::move(zone)))
     {
-        m_impl = std::make_shared<wamp_error_impl>(type, id, uri, details, args, kwargs, zone);
+    }
+
+    wamp_error(const wamp_error &other)
+        : std::runtime_error(other.uri())
+        , m_type(other.m_type)
+        , m_id(other.m_id)
+        , m_details(other.m_details)
+        , m_args(other.m_args)
+        , m_kw_args(other.m_kw_args)
+        , m_zone(other.m_zone)
+    {
     }
 
     message_type type(){
-        return m_impl->m_type;
+        return m_type;
     }
 
     uint64_t id() const{
-        return m_impl->m_id;
+        return m_id;
     }
 
     const char *uri() const{
         return what();
     }
 
-    template<typename T>
-    T args() const{
-        return m_impl->m_args.as<T>();
+    template<typename List>
+    inline List args() const{
+        return m_args.as<List>();
+    }
+
+    template<typename Map>
+    inline Map kw_args() const{
+        return m_kw_args.as<Map>();
     }
 
     template<typename T>
-    T kw_args() const{
-        return m_impl->m_kw_args.as<T>();
+    inline T details() const{
+        return m_details.as<T>();
     }
-
-    template<typename T>
-    T details() const{
-        return m_impl->m_details.as<T>();
-    }
-private:
-    std::shared_ptr<wamp_error_impl> m_impl;
-};
+  private:
+    message_type m_type;
+    uint64_t m_id;
+    msgpack::object m_details;
+    msgpack::object m_args;
+    msgpack::object m_kw_args;
+    std::shared_ptr<msgpack::zone> m_zone;
+  };
 }
 
 #endif // WAMP_ERROR_HPP
