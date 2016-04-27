@@ -1126,7 +1126,6 @@ inline void wamp_session::process_unsubscribed(wamp_message&& message)
         throw protocol_error("UNSUBSCRIBED - UNSUBSCRIBED.Request must be an integer");
     }
     uint64_t request_id = message.field<uint64_t>(1);
-    
     auto unsubscribe_request_itr = m_unsubscribe_requests.find(request_id);
     if (unsubscribe_request_itr != m_unsubscribe_requests.end()) {
         uint64_t subscription_id = unsubscribe_request_itr->second->subscription().id();
