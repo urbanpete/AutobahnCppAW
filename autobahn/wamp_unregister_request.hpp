@@ -19,18 +19,8 @@
 #ifndef AUTOBAHN_WAMP_UNREGISTER_REQUEST_HPP
 #define AUTOBAHN_WAMP_UNREGISTER_REQUEST_HPP
 
-// http://stackoverflow.com/questions/22597948/using-boostfuture-with-then-continuations/
-#ifndef BOOST_THREAD_PROVIDES_FUTURE
-#define BOOST_THREAD_PROVIDES_FUTURE
-#endif
-
-#ifndef BOOST_THREAD_PROVIDES_FUTURE_CONTINUATION
-#define BOOST_THREAD_PROVIDES_FUTURE_CONTINUATION
-#endif
-
-#ifndef BOOST_THREAD_PROVIDES_FUTURE_WHEN_ALL_WHEN_ANY
-#define BOOST_THREAD_PROVIDES_FUTURE_WHEN_ALL_WHEN_ANY
-#endif
+#include "boost_config.hpp"
+#include "wamp_registration.hpp"
 #include <boost/thread/future.hpp>
 
 namespace autobahn {
@@ -39,12 +29,14 @@ namespace autobahn {
 class wamp_unregister_request
 {
 public:
-    wamp_unregister_request();
+    wamp_unregister_request(const wamp_registration& registration);
 
     boost::promise<void>& response();
     void set_response();
+    wamp_registration& registration();
 
 private:
+    wamp_registration m_registration;
     boost::promise<void> m_response;
 };
 

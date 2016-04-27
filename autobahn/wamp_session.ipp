@@ -370,7 +370,7 @@ inline boost::future<void> wamp_session::unsubscribe(const wamp_subscription& su
     message->set_field(2, subscription.id());
 
     auto weak_self = std::weak_ptr<wamp_session>(this->shared_from_this());
-    auto unsubscribe_request = std::make_shared<wamp_unsubscribe_request>();
+    auto unsubscribe_request = std::make_shared<wamp_unsubscribe_request>(subscription);
 
     m_io_service.dispatch([=]() {
         auto shared_self = weak_self.lock();
@@ -535,7 +535,7 @@ inline boost::future<void> wamp_session::unprovide(const wamp_registration& regi
 	message->set_field(2, registration.id());
 
 	auto weak_self = std::weak_ptr<wamp_session>(this->shared_from_this());
-	auto unregister_request = std::make_shared<wamp_unregister_request>();
+	auto unregister_request = std::make_shared<wamp_unregister_request>(registration);
 
 	m_io_service.dispatch([=]() {
 		auto shared_self = weak_self.lock();
@@ -1126,9 +1126,10 @@ inline void wamp_session::process_unsubscribed(wamp_message&& message)
         throw protocol_error("UNSUBSCRIBED - UNSUBSCRIBED.Request must be an integer");
     }
     uint64_t request_id = message.field<uint64_t>(1);
-
     auto unsubscribe_request_itr = m_unsubscribe_requests.find(request_id);
     if (unsubscribe_request_itr != m_unsubscribe_requests.end()) {
+        uint64_t subscription_id = unsubscribe_request_itr->second->subscription().id();
+        m_subscription_handlers.erase(subscription_id);
         unsubscribe_request_itr->second->set_response();
         m_unsubscribe_requests.erase(request_id);
     } else {
@@ -1226,7 +1227,6 @@ inline void wamp_session::process_registered(wamp_message&& message)
             throw protocol_error("REGISTERED - REGISTERED.Registration must be an integer");
         }
         uint64_t registration_id = message.field<uint64_t>(2);
-
         m_procedures[registration_id] = register_request_itr->second->procedure();
         register_request_itr->second->set_response(wamp_registration(registration_id));
         m_register_requests.erase(register_request_itr);
@@ -1246,9 +1246,11 @@ inline void wamp_session::process_unregistered(wamp_message&& message)
         throw protocol_error("UNREGISTERED - UNREGISTERED.Request must be an integer");
     }
 
-	uint64_t request_id = message.field<uint64_t>(1);
-	auto unregister_request_itr = m_unregister_requests.find(request_id);
+    uint64_t request_id = message.field<uint64_t>(1);
+    auto unregister_request_itr = m_unregister_requests.find(request_id);
     if (unregister_request_itr != m_unregister_requests.end()) {
+        uint64_t registration_id = unregister_request_itr->second->registration().id();
+        m_procedures.erase(registration_id);
         unregister_request_itr->second->set_response();
         m_unregister_requests.erase(request_id);
     } else {
