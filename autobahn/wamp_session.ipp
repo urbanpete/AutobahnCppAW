@@ -1228,7 +1228,6 @@ inline void wamp_session::process_registered(wamp_message&& message)
             throw protocol_error("REGISTERED - REGISTERED.Registration must be an integer");
         }
         uint64_t registration_id = message.field<uint64_t>(2);
-
         m_procedures[registration_id] = register_request_itr->second->procedure();
         register_request_itr->second->set_response(wamp_registration(registration_id));
         m_register_requests.erase(register_request_itr);
@@ -1248,7 +1247,7 @@ inline void wamp_session::process_unregistered(wamp_message&& message)
         throw protocol_error("UNREGISTERED - UNREGISTERED.Request must be an integer");
     }
 
-	uint64_t request_id = message.field<uint64_t>(1);
+    uint64_t request_id = message.field<uint64_t>(1);
     auto unregister_request_itr = m_unregister_requests.find(request_id);
     if (unregister_request_itr != m_unregister_requests.end()) {
         uint64_t registration_id = unregister_request_itr->second->registration().id();
