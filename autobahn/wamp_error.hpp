@@ -38,8 +38,8 @@ class wamp_error : public std::runtime_error {
              , m_details(details)
              , m_args(args)
              , m_kw_args(kwargs)
-             , m_zone(std::make_shared<msgpack::zone>(std::move(zone)))
     {
+        m_zone.swap(zone);
     }
 
     wamp_error(const wamp_error &other)
@@ -49,8 +49,8 @@ class wamp_error : public std::runtime_error {
         , m_details(other.m_details)
         , m_args(other.m_args)
         , m_kw_args(other.m_kw_args)
-        , m_zone(other.m_zone)
     {
+        m_zone.swap(other.m_zone);
     }
 
     message_type type(){
@@ -85,7 +85,7 @@ class wamp_error : public std::runtime_error {
     msgpack::object m_details;
     msgpack::object m_args;
     msgpack::object m_kw_args;
-    std::shared_ptr<msgpack::zone> m_zone;
+    mutable msgpack::zone m_zone;
   };
 }
 
