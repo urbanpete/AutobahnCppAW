@@ -134,6 +134,7 @@ inline boost::future<void> wamp_session::stop()
         }
 
         m_running = false;
+        on_disconnect(true, "stop called");
         m_session_stop.set_value();
     });
 
@@ -221,6 +222,9 @@ inline boost::future<std::string> wamp_session::leave(const std::string& reason)
         try {
             send_message(std::move(*message), false);
             m_goodbye_sent = true;
+        }
+        catch (const network_error&) {
+            throw;
         } catch (const std::exception& e) {
             m_session_leave.set_exception(boost::copy_exception(e));
         }
@@ -602,6 +606,36 @@ inline void wamp_session::on_detach(bool was_clean, const std::string& reason)
     assert(!m_running);
 
     m_transport.reset();
+}
+
+inline void wamp_session::on_disconnect(bool was_clean, const std::string& reason)
+{
+    m_session_id = 0;
+    network_error error(reason);
+    for (auto subscribe_request : m_subscribe_requests) {
+        subscribe_request.second->response().set_exception(error);
+    }
+    for (auto unsubscribe_request : m_unsubscribe_requests) {
+        unsubscribe_request.second->response().set_exception(error);
+    }
+    for (auto register_request : m_register_requests) {
+        register_request.second->response().set_exception(error);
+    }
+    for (auto unregister_request : m_unregister_requests) {
+        unregister_request.second->response().set_exception(error);
+    }
+    for (auto call : m_calls) {
+        call.second->result().set_exception(error);
+    }
+    /*if (!m_session_join.get_future().is_ready()) {
+        m_session_join.set_exception(error);
+    }
+    if (!m_session_leave.get_future().is_ready()) {
+        m_session_leave.set_exception(error);
+    }*/
+    if (!was_clean) {
+        throw error;
+    }
 }
 
 inline void wamp_session::on_message(wamp_message&& message)

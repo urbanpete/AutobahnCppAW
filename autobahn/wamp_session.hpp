@@ -274,6 +274,7 @@ private:
     virtual void on_attach(const std::shared_ptr<wamp_transport>& transport) override;
     virtual void on_detach(bool was_clean, const std::string& reason) override;
     virtual void on_message(wamp_message&& message) override;
+    virtual void on_disconnect(bool was_clean, const std::string& reason) override;
 
     // WAMP message processing
     void process_error(wamp_message&& message);

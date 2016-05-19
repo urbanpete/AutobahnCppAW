@@ -126,7 +126,13 @@ boost::future<void> wamp_rawsocket_transport<Socket>::disconnect()
         throw network_error("network transport already disconnected");
     }
 
-    m_socket.close();
+    if (m_handler && m_socket.is_open()) {
+        m_handler->on_disconnect(true, "wamp.error.goodbye");
+    }
+
+    if (m_socket.is_open()) {
+        m_socket.close();
+    }
 
     m_disconnect.set_value();
     return m_disconnect.get_future();
@@ -147,14 +153,32 @@ void wamp_rawsocket_transport<Socket>::send_message(wamp_message&& message)
 
     // Write the length prefix as the message header.
     uint32_t length = htonl(buffer->size());
-    boost::asio::write(m_socket, boost::asio::buffer(&length, sizeof(length)));
+    boost::system::error_code ec;
+    boost::asio::write(m_socket, boost::asio::buffer(&length, sizeof(length)), ec);
 
-    // Write actual serialized message.
-    boost::asio::write(m_socket, boost::asio::buffer(buffer->data(), buffer->size()));
-
-    if (m_debug_enabled) {
-        std::cerr << "TX message (" << buffer->size() << " octets) ..." << std::endl;
-        std::cerr << "TX message: " << message << std::endl;
+    if (!ec) {
+        // Write actual serialized message.
+        boost::asio::write(m_socket, boost::asio::buffer(buffer->data(), buffer->size()), ec);
+        if (m_debug_enabled) {
+            std::cerr << "TX message (" << buffer->size() << " octets) ..." << std::endl;
+            std::cerr << "TX message: " << message << std::endl;
+        }
+        if (ec) {
+            if (m_handler) {
+                m_handler->on_disconnect(false, ec.message());
+            }
+            if (m_socket.is_open()) {
+                m_socket.close();
+            }
+        }
+    }
+    else {
+        if (m_handler) {
+            m_handler->on_disconnect(false, ec.message());
+        }
+        if (m_socket.is_open()) {
+            m_socket.close();
+        }
     }
 }
 
@@ -309,24 +333,36 @@ void wamp_rawsocket_transport<Socket>::receive_message_header(
         const boost::system::error_code& error_code,
         std::size_t /* bytes transferred */)
 {
-    if (!error_code) {
-        m_message_length = ntohl(m_message_length);
-
-        if (m_debug_enabled) {
-            std::cerr << "RX message (" << m_message_length << " octets) ..." << std::endl;
+    if (error_code) {
+        std::stringstream sstr;
+        sstr << "Receive error: " << error_code << std::endl;
+        if (m_debug_enabled && error_code != boost::asio::error::operation_aborted) {
+            std::cerr << sstr.str();
         }
-
-        m_message_unpacker.reserve_buffer(m_message_length);
-
-        boost::asio::async_read(
-            m_socket,
-            boost::asio::buffer(m_message_unpacker.buffer(), m_message_length),
-            bind(&wamp_rawsocket_transport<Socket>::receive_message_body,
-                this->shared_from_this(),
-                boost::asio::placeholders::error,
-                boost::asio::placeholders::bytes_transferred));
+        if (m_handler && m_socket.is_open()) {
+            m_handler->on_disconnect(false, sstr.str());
+        }
+        if (m_socket.is_open()) {
+            m_socket.close();
+        }
         return;
     }
+
+    m_message_length = ntohl(m_message_length);
+
+    if (m_debug_enabled) {
+        std::cerr << "RX message (" << m_message_length << " octets) ..." << std::endl;
+    }
+
+    m_message_unpacker.reserve_buffer(m_message_length);
+
+    boost::asio::async_read(
+        m_socket,
+        boost::asio::buffer(m_message_unpacker.buffer(), m_message_length),
+        bind(&wamp_rawsocket_transport<Socket>::receive_message_body,
+            this->shared_from_this(),
+            boost::asio::placeholders::error,
+            boost::asio::placeholders::bytes_transferred));
 }
 
 template <class Socket>
@@ -335,8 +371,16 @@ void wamp_rawsocket_transport<Socket>::receive_message_body(
         std::size_t /* bytes transferred */)
 {
     if (error_code) {
+        std::stringstream sstr;
+        sstr << "Receive error: " << error_code << std::endl;
         if (m_debug_enabled && error_code != boost::asio::error::operation_aborted) {
-            std::cerr << "Receive error: " << error_code << std::endl;
+            std::cerr << sstr.str();
+        }
+        if (m_handler && m_socket.is_open()) {
+            m_handler->on_disconnect(false, sstr.str());
+        }
+        if (m_socket.is_open()) {
+            m_socket.close();
         }
         return;
     }
@@ -357,8 +401,9 @@ void wamp_rawsocket_transport<Socket>::receive_message_body(
             if (m_debug_enabled) {
                 std::cerr << "RX message: " << message << std::endl;
             }
-
-            m_handler->on_message(std::move(message));
+            if (m_handler) {
+                m_handler->on_message(std::move(message));
+            }
         }
     } else {
         std::cerr << "RX message ignored: no handler attached" << std::endl;
