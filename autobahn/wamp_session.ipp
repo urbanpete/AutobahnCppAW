@@ -627,12 +627,22 @@ inline void wamp_session::on_disconnect(bool was_clean, const std::string& reaso
     for (auto call : m_calls) {
         call.second->result().set_exception(error);
     }
-    /*if (!m_session_join.get_future().is_ready()) {
-        m_session_join.set_exception(error);
+    try {
+        if (!m_session_join.get_future().is_ready()) {
+            m_session_join.set_exception(error);
+        }
     }
-    if (!m_session_leave.get_future().is_ready()) {
-        m_session_leave.set_exception(error);
-    }*/
+    catch (boost::future_already_retrieved &) {
+        // ignore this exception
+    }
+    try {
+        if (!m_session_leave.get_future().is_ready()) {
+            m_session_leave.set_exception(error);
+        }
+    }
+    catch (boost::future_already_retrieved &) {
+        // ignore this exception
+    }
     if (!was_clean) {
         throw error;
     }
