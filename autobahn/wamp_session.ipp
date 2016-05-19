@@ -30,6 +30,7 @@
 
 #include "exceptions.hpp"
 #include "wamp_call.hpp"
+#include "wamp_error.hpp"
 #include "wamp_event.hpp"
 #include "wamp_invocation.hpp"
 #include "wamp_message.hpp"
@@ -37,6 +38,7 @@
 #include "wamp_publication.hpp"
 #include "wamp_registration.hpp"
 #include "wamp_register_request.hpp"
+#include "wamp_unregister_request.hpp"
 #include "wamp_subscribe_request.hpp"
 #include "wamp_subscription.hpp"
 #include "wamp_transport.hpp"
@@ -44,7 +46,9 @@
 #include "wamp_authenticate.hpp"
 #include "wamp_challenge.hpp"
 
+#ifndef NO_OPEN_SSL
 #include "wamp_auth_utils.hpp"
+#endif
 
 #if !(defined(_WIN32) || defined(WIN32))
 #include <arpa/inet.h>
@@ -366,7 +370,7 @@ inline boost::future<void> wamp_session::unsubscribe(const wamp_subscription& su
     message->set_field(2, subscription.id());
 
     auto weak_self = std::weak_ptr<wamp_session>(this->shared_from_this());
-    auto unsubscribe_request = std::make_shared<wamp_unsubscribe_request>();
+    auto unsubscribe_request = std::make_shared<wamp_unsubscribe_request>(subscription);
 
     m_io_service.dispatch([=]() {
         auto shared_self = weak_self.lock();
@@ -522,7 +526,36 @@ inline boost::future<wamp_registration> wamp_session::provide(
     return register_request->response().get_future();
 }
 
-boost::future<wamp_authenticate> wamp_session::on_challenge(const wamp_challenge& challenge)
+inline boost::future<void> wamp_session::unprovide(const wamp_registration& registration){
+    uint64_t request_id = ++m_request_id;
+
+	auto message = std::make_shared<wamp_message>(3);
+	message->set_field(0, static_cast<int>(message_type::UNREGISTER));
+	message->set_field(1, request_id);
+	message->set_field(2, registration.id());
+
+	auto weak_self = std::weak_ptr<wamp_session>(this->shared_from_this());
+	auto unregister_request = std::make_shared<wamp_unregister_request>(registration);
+
+	m_io_service.dispatch([=]() {
+		auto shared_self = weak_self.lock();
+		if (!shared_self) {
+			return;
+		}
+
+		try {
+			send_message(std::move(*message));
+			m_unregister_requests.emplace(request_id, unregister_request);
+		}
+		catch (const std::exception& e) {
+			unregister_request->response().set_exception(boost::copy_exception(e));
+		}
+	});
+
+	return unregister_request->response().get_future();
+}
+
+inline boost::future<wamp_authenticate> wamp_session::on_challenge(const wamp_challenge& challenge)
 {
     // a dummy implementation
     boost::promise<wamp_authenticate> dummy;
@@ -644,7 +677,7 @@ inline void wamp_session::on_message(wamp_message&& message)
         case message_type::UNREGISTER:
             throw protocol_error("received UNREGISTER message unexpected for WAMP client roles");
         case message_type::UNREGISTERED:
-            // FIXME
+            process_unregistered(std::move(message));
             break;
         case message_type::INVOCATION:
             process_invocation(std::move(message));
@@ -656,7 +689,7 @@ inline void wamp_session::on_message(wamp_message&& message)
     }
 }
 
-void wamp_session::process_challenge(wamp_message&& message)
+inline void wamp_session::process_challenge(wamp_message&& message)
 {
     // kind of authentication
     std::string whatAuth = message.field<std::string>(1);
@@ -712,8 +745,10 @@ void wamp_session::process_challenge(wamp_message&& message)
             if (m_debug_enabled) {
                 std::cerr << "failed to parse challenge details" << std::endl;
             }
-            throw protocol_error("wampcra authentication: Failed parse challange details");
-        };
+			std::string message("wampcra authentication: Failed parse challange details:");
+			message += e.what();
+			throw protocol_error(message);
+		};
     /////////////////////////////////////////
     // ticket authentication
     /////////////////////////////////////////
@@ -754,8 +789,10 @@ void wamp_session::process_challenge(wamp_message&& message)
                     if (m_debug_enabled) {
                         std::cerr << "failed to handle authentication" << std::endl;
                     }
-                    throw protocol_error("authentication error: failed send signature");
-                }
+					std::string message("authentication error: failed send signature:");
+					message += e.what();
+					throw protocol_error(message);
+				}
             });
 
             // make sure the context_response is copied into this lambda...
@@ -764,7 +801,9 @@ void wamp_session::process_challenge(wamp_message&& message)
             if (m_debug_enabled) {
                 std::cerr << "failed to handle authentication" << std::endl;
             }
-            throw protocol_error("authentication error: failed send signature");
+			std::string message("authentication error: failed send signature:");
+			message += e.what();
+            throw protocol_error(message);
         }
     });
 }
@@ -772,7 +811,6 @@ void wamp_session::process_challenge(wamp_message&& message)
 inline void wamp_session::process_welcome(wamp_message&& message)
 {
     m_session_id = message.field<uint64_t>(1);
-    message.field(2).convert(m_welcome_details);
     m_session_join.set_value(m_session_id);
 }
 
@@ -846,6 +884,10 @@ inline void wamp_session::process_error(wamp_message&& message)
         throw protocol_error("invalid ERROR message - ERROR.Type must one of CALL, REGISTER, UNREGISTER, SUBSCRIBE, UNSUBSCRIBE");
     }
 
+    msgpack::object args = EMPTY_ARGUMENTS;
+    msgpack::object details = EMPTY_DETAILS;
+    msgpack::object kw_args = EMPTY_KW_ARGUMENTS;
+
     // REQUEST.Request|id
     if (!message.is_field_type(2, msgpack::type::POSITIVE_INTEGER)) {
         throw protocol_error("invalid ERROR message structure - REQUEST.Request must be an integer");
@@ -857,17 +899,20 @@ inline void wamp_session::process_error(wamp_message&& message)
         throw protocol_error("invalid ERROR message structure - Details must be a dictionary");
     }
 
+    details = message.field(3);
+
     // Error|uri
     if (!message.is_field_type(4, msgpack::type::STR)) {
         throw protocol_error("invalid ERROR message - Error must be a string (URI)");
     }
-    auto error = std::move(message.field<std::string>(4));
+    auto error_uri = std::move(message.field<std::string>(4));
 
     // Arguments|list
     if (message.size() > 5) {
         if (!message.is_field_type(5, msgpack::type::ARRAY)) {
             throw protocol_error("invalid ERROR message structure - Arguments must be a list");
         }
+        args = message.field(5);
     }
 
     // ArgumentsKw|list
@@ -875,20 +920,7 @@ inline void wamp_session::process_error(wamp_message&& message)
         if (!message.is_field_type(6, msgpack::type::MAP)) {
             throw protocol_error("invalid ERROR message structure - ArgumentsKw must be a dictionary");
         }
-        try {
-            auto kw_args = message.field<std::unordered_map<std::string, std::string>>(6);
-            const auto itr = kw_args.find("what");
-            if (itr != kw_args.end()) {
-                error += ": ";
-                error += itr->second;
-            }
-        } catch (const std::exception& e) {
-            if (m_debug_enabled) {
-                std::cerr << "failed to parse error message keyword arguments" << std::endl;
-            }
-
-            error += ": unknown exception";
-        }
+        kw_args = message.field(6);
     }
 
     switch (request_type) {
@@ -901,8 +933,7 @@ inline void wamp_session::process_error(wamp_message&& message)
                 auto call_itr = m_calls.find(request_id);
 
                 if (call_itr != m_calls.end()) {
-                    // FIXME: Forward all error info.
-                    call_itr->second->result().set_exception(std::runtime_error(error));
+                    call_itr->second->result().set_exception(wamp_error(request_type, request_id, error_uri, details, args, kw_args, std::move(message.zone())));
                     m_calls.erase(call_itr);
                 } else {
                     throw protocol_error("bogus ERROR message for non-pending CALL request ID");
@@ -1095,9 +1126,10 @@ inline void wamp_session::process_unsubscribed(wamp_message&& message)
         throw protocol_error("UNSUBSCRIBED - UNSUBSCRIBED.Request must be an integer");
     }
     uint64_t request_id = message.field<uint64_t>(1);
-
     auto unsubscribe_request_itr = m_unsubscribe_requests.find(request_id);
     if (unsubscribe_request_itr != m_unsubscribe_requests.end()) {
+        uint64_t subscription_id = unsubscribe_request_itr->second->subscription().id();
+        m_subscription_handlers.erase(subscription_id);
         unsubscribe_request_itr->second->set_response();
         m_unsubscribe_requests.erase(request_id);
     } else {
@@ -1195,12 +1227,34 @@ inline void wamp_session::process_registered(wamp_message&& message)
             throw protocol_error("REGISTERED - REGISTERED.Registration must be an integer");
         }
         uint64_t registration_id = message.field<uint64_t>(2);
-
         m_procedures[registration_id] = register_request_itr->second->procedure();
         register_request_itr->second->set_response(wamp_registration(registration_id));
         m_register_requests.erase(register_request_itr);
     } else {
         throw protocol_error("REGISTERED - no pending request ID");
+    }
+}
+
+inline void wamp_session::process_unregistered(wamp_message&& message)
+{
+    // [UNREGISTERED, UNREGISTER.Request|id]
+    if (message.size() != 2) {
+        throw protocol_error("UNREGISTERED - length must be 2");
+    }
+
+    if (!message.is_field_type(1, msgpack::type::POSITIVE_INTEGER)) {
+        throw protocol_error("UNREGISTERED - UNREGISTERED.Request must be an integer");
+    }
+
+    uint64_t request_id = message.field<uint64_t>(1);
+    auto unregister_request_itr = m_unregister_requests.find(request_id);
+    if (unregister_request_itr != m_unregister_requests.end()) {
+        uint64_t registration_id = unregister_request_itr->second->registration().id();
+        m_procedures.erase(registration_id);
+        unregister_request_itr->second->set_response();
+        m_unregister_requests.erase(request_id);
+    } else {
+        throw protocol_error("UNREGISTERED - no pending request ID");
     }
 }
 
@@ -1219,11 +1273,6 @@ inline void wamp_session::send_message(wamp_message&& message, bool session_esta
     }
 
     m_transport->send_message(std::move(message));
-}
-
-inline const std::unordered_map<std::string, msgpack::object>&  wamp_session::welcome_details()
-{
-    return m_welcome_details;
 }
 
 } // namespace autobahn

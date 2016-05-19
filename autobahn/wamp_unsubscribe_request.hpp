@@ -31,10 +31,8 @@
 #ifndef AUTOBAHN_WAMP_UNSUBSCRIBE_REQUEST_HPP
 #define AUTOBAHN_WAMP_UNSUBSCRIBE_REQUEST_HPP
 
-// http://stackoverflow.com/questions/22597948/using-boostfuture-with-then-continuations/
-#define BOOST_THREAD_PROVIDES_FUTURE
-#define BOOST_THREAD_PROVIDES_FUTURE_CONTINUATION
-#define BOOST_THREAD_PROVIDES_FUTURE_WHEN_ALL_WHEN_ANY
+#include "boost_config.hpp"
+#include "wamp_subscription.hpp"
 #include <boost/thread/future.hpp>
 
 namespace autobahn {
@@ -43,12 +41,14 @@ namespace autobahn {
 class wamp_unsubscribe_request
 {
 public:
-    wamp_unsubscribe_request();
+    wamp_unsubscribe_request(const wamp_subscription& subscription);
 
     boost::promise<void>& response();
     void set_response();
+    wamp_subscription &subscription();
 
 private:
+    wamp_subscription m_subscription;
     boost::promise<void> m_response;
 };
 

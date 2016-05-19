@@ -38,11 +38,8 @@
 #include "wamp_procedure.hpp"
 #include "wamp_subscribe_options.hpp"
 #include "wamp_transport_handler.hpp"
+#include "boost_config.hpp"
 
-// http://stackoverflow.com/questions/22597948/using-boostfuture-with-then-continuations/
-#define BOOST_THREAD_PROVIDES_FUTURE
-#define BOOST_THREAD_PROVIDES_FUTURE_CONTINUATION
-#define BOOST_THREAD_PROVIDES_FUTURE_WHEN_ALL_WHEN_ANY
 #include <boost/asio.hpp>
 #include <boost/thread/future.hpp>
 #include <cstdint>
@@ -58,7 +55,9 @@
 #include <vector>
 
 #if defined(_WIN32) || defined(WIN32)
+#ifndef WIN32_LEAN_AND_MEAN
 #define WIN32_LEAN_AND_MEAN
+#endif
 #endif
 
 #ifdef ERROR
@@ -71,6 +70,7 @@ class wamp_call;
 class wamp_message;
 class wamp_register_request;
 class wamp_registration;
+class wamp_unregister_request;
 class wamp_subscribe_request;
 class wamp_subscription;
 class wamp_transport;
@@ -132,6 +132,15 @@ public:
      */
     boost::future<std::string> leave(
             const std::string& reason = std::string("wamp.error.close_realm"));
+
+	/*!
+	 * \brief is_connected
+	 * \return true if there is a valid session
+	 */
+	bool is_connected()
+	{
+	    return m_session_id != 0U;
+	}
 
     /*!
      * Publish an event with empty payload to a topic.
@@ -238,7 +247,13 @@ public:
             const std::string& uri,
             const wamp_procedure& procedure,
             const provide_options& options = provide_options());
-
+    /*!
+    * Unregister a provider handler to previosuly provided registration.
+    *
+    * \param registration The registration to stop providing.
+    * \return A future that synchronizes to the unregister response.
+    */
+    boost::future<void> unprovide(const wamp_registration& registration);
     /*!
      * Function called by the session when authenticating. It always has to be
      * re-implemented (if authentication is part of the system).
@@ -248,40 +263,6 @@ public:
      * \return A future that resolves to an authentication response.
      */
     virtual boost::future<wamp_authenticate> on_challenge(const wamp_challenge& challenge);
-
-    /*!
-    * Accessor method to WELCOME DETAILS dictionary containing router roles 
-    * and corresponding features, authid, authrole, ...)
-    *
-    *
-    * \return A dictionary of objects received with WELCOME message upon joining.
-    * i.e.
-    * {
-    *   "realm": "<string>",
-    *   "authprovider": "dynamic",
-    *   "roles": {
-    *     "broker": {
-    *       "features": {
-    *         "publisher_identification": true,
-    *         "pattern_based_subscription": true,
-    *         ...
-    *       }
-    *     },
-    *     "dealer": {
-    *       "features": {
-    *         "pattern_based_registration": true,
-    *         "progressive_call_results": true,
-    *          ...
-    *       }
-    *     }
-    *   },
-    * "authid": "<assigned authid>",
-    * "authrole": "<assigned auth role>",
-    * "authmethod": "wampcra",
-    *  ...
-    * }
-    */
-    const std::unordered_map<std::string, msgpack::object>& welcome_details();
 
 private:
     // Implements the wamp transport handler interface.
@@ -299,6 +280,7 @@ private:
     void process_unsubscribed(wamp_message&& message);
     void process_event(wamp_message&& message);
     void process_registered(wamp_message&& message);
+    void process_unregistered(wamp_message&& message);
     void process_invocation(wamp_message&& message);
     void process_goodbye(wamp_message&& message);
 
@@ -365,12 +347,11 @@ private:
     // Map of outstanding WAMP register requests (request ID -> register request).
     std::map<uint64_t, std::shared_ptr<wamp_register_request>> m_register_requests;
 
+    // Map of outstanding WAMP unregister requests (request ID -> unregister request).
+    std::map<uint64_t, std::shared_ptr<wamp_unregister_request>> m_unregister_requests;
+
     // Map of registered procedures (registration ID -> procedure)
     std::map<uint64_t, wamp_procedure> m_procedures;
-
-    // Welcome details
-    std::unordered_map<std::string, msgpack::object> m_welcome_details;
-
 };
 
 } // namespace autobahn
