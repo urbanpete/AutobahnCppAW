@@ -612,36 +612,63 @@ inline void wamp_session::on_disconnect(bool was_clean, const std::string& reaso
 {
     m_session_id = 0;
     network_error error(reason);
-    for (auto subscribe_request : m_subscribe_requests) {
-        subscribe_request.second->response().set_exception(error);
-    }
-    for (auto unsubscribe_request : m_unsubscribe_requests) {
-        unsubscribe_request.second->response().set_exception(error);
-    }
-    for (auto register_request : m_register_requests) {
-        register_request.second->response().set_exception(error);
-    }
-    for (auto unregister_request : m_unregister_requests) {
-        unregister_request.second->response().set_exception(error);
-    }
-    for (auto call : m_calls) {
-        call.second->result().set_exception(error);
-    }
     try {
-        if (!m_session_join.get_future().is_ready()) {
+        for (auto subscribe_request : m_subscribe_requests) {
+            try {
+                subscribe_request.second->response().set_exception(error);
+            }
+            catch (boost::promise_already_satisfied &) {
+                // ignore this exception
+            }
+        }
+        for (auto unsubscribe_request : m_unsubscribe_requests) {
+            try {
+                unsubscribe_request.second->response().set_exception(error);
+            }
+            catch (boost::promise_already_satisfied &) {
+                // ignore this exception
+            }
+        }
+        for (auto register_request : m_register_requests) {
+            try {
+                register_request.second->response().set_exception(error);
+            }
+            catch (boost::promise_already_satisfied &) {
+                // ignore this exception
+            }
+        }
+        for (auto unregister_request : m_unregister_requests) {
+            try {
+                unregister_request.second->response().set_exception(error);
+            }
+            catch (boost::promise_already_satisfied &) {
+                // ignore this exception
+            }
+        }
+        for (auto call : m_calls) {
+            try {
+                call.second->result().set_exception(error);
+            }
+            catch (boost::promise_already_satisfied &) {
+                // ignore this exception
+            }
+        }
+        try {
             m_session_join.set_exception(error);
         }
-    }
-    catch (boost::future_already_retrieved &) {
-        // ignore this exception
-    }
-    try {
-        if (!m_session_leave.get_future().is_ready()) {
+        catch (boost::promise_already_satisfied &) {
+            // ignore this exception
+        }
+        try {
             m_session_leave.set_exception(error);
         }
+        catch (boost::promise_already_satisfied &) {
+            // ignore this exception
+        }
     }
-    catch (boost::future_already_retrieved &) {
+    catch (std::exception &) {
         // ignore this exception
+        m_running = false;
     }
     if (!was_clean) {
         throw error;
