@@ -219,14 +219,16 @@ inline boost::future<std::string> wamp_session::leave(const std::string& reason)
             m_session_leave.set_exception(protocol_error("goodbye already sent"));
         }
 
-        try {
-            send_message(std::move(*message), false);
-            m_goodbye_sent = true;
-        }
-        catch (const network_error&) {
-            throw;
-        } catch (const std::exception& e) {
-            m_session_leave.set_exception(boost::copy_exception(e));
+        else {
+            try {
+                send_message(std::move(*message), false);
+                m_goodbye_sent = true;
+                m_session_leave.set_value("leaving");
+            } catch (const network_error&) {
+                throw;
+            } catch (const std::exception &e) {
+                m_session_leave.set_exception(boost::copy_exception(e));
+            }
         }
 
         m_session_id = 0;
@@ -920,13 +922,14 @@ inline void wamp_session::process_goodbye(wamp_message&& message)
         goodbye.set_field(2, std::string("wamp.error.goodbye_and_out"));
 
         send_message(std::move(goodbye));
+        std::string reason = message.field<std::string>(2);
+        m_session_leave.set_value(reason);
     } else {
         // we previously initiated closing, so this
         // is the peer reply.
+        // The promise was already fulfilled if we initiated closing.
     }
 
-    std::string reason = message.field<std::string>(2);
-    m_session_leave.set_value(reason);
 }
 
 inline void wamp_session::process_error(wamp_message&& message)
