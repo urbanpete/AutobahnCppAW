@@ -120,19 +120,25 @@ boost::future<void> wamp_rawsocket_transport<Socket>::connect()
 }
 
 template <class Socket>
+void wamp_rawsocket_transport<Socket>::close_socket(bool was_clean, const std::string &reason)
+{
+    if (m_handler && m_socket.is_open()) {
+        m_handler->on_disconnect(was_clean, reason);
+    }
+
+    if (m_socket.is_open()) {
+        m_socket.close();
+    }
+}
+
+template <class Socket>
 boost::future<void> wamp_rawsocket_transport<Socket>::disconnect()
 {
     if (!m_socket.is_open()) {
         throw network_error("network transport already disconnected");
     }
 
-    if (m_handler && m_socket.is_open()) {
-        m_handler->on_disconnect(true, "wamp.error.goodbye");
-    }
-
-    if (m_socket.is_open()) {
-        m_socket.close();
-    }
+    close_socket(true, "wamp.error.goodbye");
 
     m_disconnect.set_value();
     return m_disconnect.get_future();
@@ -163,22 +169,9 @@ void wamp_rawsocket_transport<Socket>::send_message(wamp_message&& message)
             std::cerr << "TX message (" << buffer->size() << " octets) ..." << std::endl;
             std::cerr << "TX message: " << message << std::endl;
         }
-        if (ec) {
-            if (m_handler) {
-                m_handler->on_disconnect(false, ec.message());
-            }
-            if (m_socket.is_open()) {
-                m_socket.close();
-            }
-        }
     }
-    else {
-        if (m_handler) {
-            m_handler->on_disconnect(false, ec.message());
-        }
-        if (m_socket.is_open()) {
-            m_socket.close();
-        }
+    if (ec) {
+        close_socket(false, ec.message());
     }
 }
 
@@ -339,12 +332,7 @@ void wamp_rawsocket_transport<Socket>::receive_message_header(
         if (m_debug_enabled && error_code != boost::asio::error::operation_aborted) {
             std::cerr << sstr.str();
         }
-        if (m_handler && m_socket.is_open()) {
-            m_handler->on_disconnect(false, sstr.str());
-        }
-        if (m_socket.is_open()) {
-            m_socket.close();
-        }
+        close_socket(false, sstr.str());
         return;
     }
 
@@ -376,12 +364,7 @@ void wamp_rawsocket_transport<Socket>::receive_message_body(
         if (m_debug_enabled && error_code != boost::asio::error::operation_aborted) {
             std::cerr << sstr.str();
         }
-        if (m_handler && m_socket.is_open()) {
-            m_handler->on_disconnect(false, sstr.str());
-        }
-        if (m_socket.is_open()) {
-            m_socket.close();
-        }
+        close_socket(false, sstr.str());
         return;
     }
 

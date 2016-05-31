@@ -73,8 +73,8 @@ public:
     /*!
     * Called by the transport when the session is disconnected.
     *
-    * @param was_clean Whether or not the transport is cleanly detaching.
-    * @param reason The reason for detaching.
+    * @param was_clean Whether or not the transport is cleanly disconnecting.
+    * @param reason The reason for the disconnection.
     */
     virtual void on_disconnect(bool was_clean, const std::string& reason) = 0;
 

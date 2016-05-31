@@ -223,6 +223,7 @@ inline boost::future<std::string> wamp_session::leave(const std::string& reason)
             try {
                 send_message(std::move(*message), false);
                 m_goodbye_sent = true;
+                // don't wait for reply to complete the promise, if network connectivity is down it won't get set.
                 m_session_leave.set_value("leaving");
             } catch (const network_error&) {
                 throw;
