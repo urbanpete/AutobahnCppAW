@@ -64,11 +64,19 @@ public:
     virtual void on_detach(bool was_clean, const std::string& reason) = 0;
 
     /*!
-     * Called by the transport when a message is received.
-     *
-     * @param message The message that has been received.
-     */
+    * Called by the transport when a message is received.
+    *
+    * @param message The message that has been received.
+    */
     virtual void on_message(wamp_message&& message) = 0;
+
+    /*!
+    * Called by the transport when the session is disconnected.
+    *
+    * @param was_clean Whether or not the transport is cleanly disconnecting.
+    * @param reason The reason for the disconnection.
+    */
+    virtual void on_disconnect(bool was_clean, const std::string& reason) = 0;
 
     /*!
      * Default virtual destructor.

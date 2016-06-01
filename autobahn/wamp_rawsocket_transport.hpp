@@ -169,6 +169,8 @@ private:
             const boost::system::error_code& error,
             std::size_t /* bytes transferred */);
 
+    void close_socket(bool was_clean, const std::string &reason);
+
 private:
     /*!
      * The underlying socket for the transport.

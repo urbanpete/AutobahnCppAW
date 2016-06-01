@@ -134,6 +134,7 @@ inline boost::future<void> wamp_session::stop()
         }
 
         m_running = false;
+        on_disconnect(true, "stop called");
         m_session_stop.set_value();
     });
 
@@ -218,11 +219,17 @@ inline boost::future<std::string> wamp_session::leave(const std::string& reason)
             m_session_leave.set_exception(protocol_error("goodbye already sent"));
         }
 
-        try {
-            send_message(std::move(*message), false);
-            m_goodbye_sent = true;
-        } catch (const std::exception& e) {
-            m_session_leave.set_exception(boost::copy_exception(e));
+        else {
+            try {
+                send_message(std::move(*message), false);
+                m_goodbye_sent = true;
+                // don't wait for reply to complete the promise, if network connectivity is down it won't get set.
+                m_session_leave.set_value("leaving");
+            } catch (const network_error&) {
+                throw;
+            } catch (const std::exception &e) {
+                m_session_leave.set_exception(boost::copy_exception(e));
+            }
         }
 
         m_session_id = 0;
@@ -604,6 +611,73 @@ inline void wamp_session::on_detach(bool was_clean, const std::string& reason)
     m_transport.reset();
 }
 
+inline void wamp_session::on_disconnect(bool was_clean, const std::string& reason)
+{
+    m_session_id = 0;
+    network_error error(reason);
+    try {
+        for (auto subscribe_request : m_subscribe_requests) {
+            try {
+                subscribe_request.second->response().set_exception(error);
+            }
+            catch (boost::promise_already_satisfied &) {
+                // ignore this exception
+            }
+        }
+        for (auto unsubscribe_request : m_unsubscribe_requests) {
+            try {
+                unsubscribe_request.second->response().set_exception(error);
+            }
+            catch (boost::promise_already_satisfied &) {
+                // ignore this exception
+            }
+        }
+        for (auto register_request : m_register_requests) {
+            try {
+                register_request.second->response().set_exception(error);
+            }
+            catch (boost::promise_already_satisfied &) {
+                // ignore this exception
+            }
+        }
+        for (auto unregister_request : m_unregister_requests) {
+            try {
+                unregister_request.second->response().set_exception(error);
+            }
+            catch (boost::promise_already_satisfied &) {
+                // ignore this exception
+            }
+        }
+        for (auto call : m_calls) {
+            try {
+                call.second->result().set_exception(error);
+            }
+            catch (boost::promise_already_satisfied &) {
+                // ignore this exception
+            }
+        }
+        try {
+            m_session_join.set_exception(error);
+        }
+        catch (boost::promise_already_satisfied &) {
+            // ignore this exception
+        }
+        try {
+            m_session_leave.set_exception(error);
+        }
+        catch (boost::promise_already_satisfied &) {
+            // ignore this exception
+        }
+    }
+    catch (std::exception &) {
+        // ignore this exception
+        m_running = false;
+    }
+    if (!was_clean) {
+        throw error;
+    }
+}
+
 inline void wamp_session::on_message(wamp_message&& message)
 {
     // FIXME: Move this check into the transport
@@ -849,13 +923,14 @@ inline void wamp_session::process_goodbye(wamp_message&& message)
         goodbye.set_field(2, std::string("wamp.error.goodbye_and_out"));
 
         send_message(std::move(goodbye));
+        std::string reason = message.field<std::string>(2);
+        m_session_leave.set_value(reason);
     } else {
         // we previously initiated closing, so this
         // is the peer reply.
+        // The promise was already fulfilled if we initiated closing.
     }
 
-    std::string reason = message.field<std::string>(2);
-    m_session_leave.set_value(reason);
 }
 
 inline void wamp_session::process_error(wamp_message&& message)
