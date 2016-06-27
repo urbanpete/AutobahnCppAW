@@ -1008,7 +1008,7 @@ inline void wamp_session::process_error(wamp_message&& message)
                 auto call_itr = m_calls.find(request_id);
 
                 if (call_itr != m_calls.end()) {
-                    call_itr->second->result().set_exception(wamp_error(request_type, request_id, error_uri, details, args, kw_args, std::move(message.zone())));
+                    call_itr->second->result().set_exception(wamp_error(request_type, request_id, error_uri, details, args, kw_args, message.zone()));
                     m_calls.erase(call_itr);
                 } else {
                     throw protocol_error("bogus ERROR message for non-pending CALL request ID");
